@@ -49,6 +49,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Grok runtime image
-        run: docker build --progress=plain -f services/sandbox-runtime/Dockerfile services/sandbox-runtime
+        run: docker build --tag grokbot-acp-test --progress=plain -f services/sandbox-runtime/Dockerfile services/sandbox-runtime
       - name: Check ACP probe syntax
         run: node --check services/sandbox-runtime/tools/acp-smoke.mjs
+      - name: Check actual Grok ACP daemon in Docker
+        env:
+          GROK_AGENT_SECRET: integration-smoke-test-token
+        run: |
+          docker run --rm -d --name grokbot-acp-test \
+            -e GROK_AGENT_SECRET \
+            -p 127.0.0.1:2419:2419 grokbot-acp-test
+          trap 'docker logs --tail 50 grokbot-acp-test || true; docker rm -f grokbot-acp-test || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -sS --max-time 1 -o /dev/null http://127.0.0.1:2419/ws; then
+              break
+            fi
+            sleep 1
+          done
+          node services/sandbox-runtime/tools/local-server-smoke.mjs
