@@ -1,3 +1,11 @@
+# The installer downloads its own release artifacts; keep those out of the final image.
+FROM node:24-trixie-slim AS grok-installer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates && rm -rf /var/lib/apt/lists/*
+ARG GROK_VERSION=1.0.50
+RUN curl -fsSL https://x.ai/cli/install.sh | bash -s -- "$GROK_VERSION" \
+    && test -x /root/.grok/bin/grok
+
 FROM node:24-trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -6,10 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Grok CLI is installed during image build. Runtime egress is default-denied.
 # The pinned CLI version is independently verified by the ACP smoke test.
-ARG GROK_VERSION=1.0.50
-RUN curl -fsSL https://x.ai/cli/install.sh | bash -s -- "$GROK_VERSION" \
-    && install /root/.grok/bin/grok /usr/local/bin/grok \
-    && grok --version
+COPY --from=grok-installer /root/.grok/bin/grok /usr/local/bin/grok
+RUN grok --version
 
 RUN printf 'set -g mouse on\nset -g history-limit 50000\n' > /etc/tmux.conf
 RUN install -d -o node -g node -m 0750 /home/node/.grok \
