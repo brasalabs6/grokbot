@@ -68,6 +68,12 @@ export function AcpChat({ sessionId, active }: { sessionId: string; active: bool
   const onProtocolMessage = useCallback((raw: string) => {
     let message: RpcMessage;
     try { message = JSON.parse(raw) as RpcMessage; } catch { return; }
+    if(message.method==="grokbot/event_cursor"){
+      const seq=message.params?.seq;
+      if(typeof seq==="number"&&Number.isSafeInteger(seq)&&seq>=0)
+        replayCursor.current=Math.max(replayCursor.current,seq);
+      return;
+    }
     if (message.id !== undefined && message.method === "session/request_permission") {
       const params=message.params??{};
       const options=Array.isArray(params.options) ? params.options as Approval["options"] : [];
@@ -127,7 +133,16 @@ export function AcpChat({ sessionId, active }: { sessionId: string; active: bool
         for(const event of payload.events??[]) {
           if(event.seq<=replayCursor.current)continue;
           replayCursor.current=event.seq;
-          if(event.message.method==="session/update") {
+          if(event.message.method==="session/prompt") {
+            const parts=event.message.params?.prompt;
+            if(Array.isArray(parts)) {
+              const text=parts.map(p=>p?.type==="text"&&typeof p.text==="string"?p.text:"")
+                .filter(Boolean).join("\n");
+              if(text)setEntries(prev=>[...prev,{
+                id:crypto.randomUUID(),role:"user",text
+              }]);
+            }
+          } else if(event.message.method==="session/update") {
             onProtocolMessage(JSON.stringify(event.message));
           }
         }
