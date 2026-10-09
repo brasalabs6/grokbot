@@ -176,7 +176,7 @@ export class SessionSandbox extends DurableObject<Env> {
   }
 
   /** Read-only, path-confined workspace browser. No arbitrary shell strings. */
-  async workspaceOperation(op:"list"|"read",path:string) {
+  async workspaceOperation(op:"list"|"read",path:string):Promise<{ok:boolean;error?:{code:string};kind?:string;path?:string;items?:unknown[];content?:string;size?:number;truncated?:boolean;total?:number}> {
     if(!this.container().running)return {ok:false,error:{code:"CONTAINER_STOPPED"}};
     if(!["list","read"].includes(op)||typeof path!=="string"||path.length>1024)
       return {ok:false,error:{code:"INVALID_WORKSPACE_INPUT"}};
@@ -185,7 +185,7 @@ export class SessionSandbox extends DurableObject<Env> {
       const parsed=JSON.parse(result.stdout);
       if(!parsed||typeof parsed!=="object"||typeof parsed.ok!=="boolean")
         return {ok:false,error:{code:"INVALID_WORKSPACE_OUTPUT"}};
-      return parsed;
+      return parsed as {ok:boolean;error?:{code:string};kind?:string;path?:string;items?:unknown[];content?:string;size?:number;truncated?:boolean;total?:number};
     }catch{return {ok:false,error:{code:"WORKSPACE_UNAVAILABLE"}};}
   }
   async stop(operationId: string, checkpoint: boolean) {
