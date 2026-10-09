@@ -39,6 +39,7 @@ export default async function AgentSessionPage({ params }: Params) {
         id={session.id}
         initialState={session.state}
         modelId={session.modelId}
+        stateVersion={session.stateVersion}
       />
     </main>
   );
