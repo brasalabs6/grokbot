@@ -457,3 +457,29 @@ export async function recordStartOperationStatus(args:{
   )).returning();
   return updated??null;
 }
+
+/** A verified ACP session binds the durable sandbox generation to an owner. */
+export async function confirmAgentReady(args:{
+  sessionId:string;ownerId:string;generation:number;
+}) {
+  return db.transaction(async tx=>{
+    const [session]=await tx.select().from(agentSession).where(and(
+      eq(agentSession.id,args.sessionId),
+      eq(agentSession.ownerId,args.ownerId),
+      isNull(agentSession.deletedAt)
+    )).for("update");
+    if(!session)return null;
+    if(session.generation!==args.generation)
+      throw new AgentConflict("GENERATION_CONFLICT");
+    if(session.state==="READY"||session.state==="IDLE")return session;
+    if(session.state!=="PROVISIONING"&&session.state!=="RECOVERING")
+      throw new AgentConflict("SESSION_NOT_READY");
+    const [updated]=await tx.update(agentSession).set({
+      state:"READY",stateVersion:session.stateVersion+1,updatedAt:new Date()
+    }).where(eq(agentSession.id,session.id)).returning();
+    await tx.update(agentSandbox).set({
+      state:"RUNNING",generation:args.generation,lastHeartbeat:new Date()
+    }).where(eq(agentSandbox.sessionId,session.id));
+    return updated;
+  });
+}
