@@ -107,18 +107,21 @@ export class SessionSandbox extends DurableObject<Env> {
     };
   }
   /** Privileged one-off proof of real Grok + ACP + Workers AI tool execution. */
-  async acpSmoke() {
+  async acpSmoke(): Promise<{ok:boolean; error?:string; updateTypes?:string[]}> {
     const result = await this.exec(["node", "/opt/grokbot/acp-smoke.mjs"]);
     if (result.exitCode !== 0) {
       return {
         ok: false,
         error: "ACP_PROBE_FAILED",
-        stderr: result.stderr.slice(-500),
-        stdout: result.stdout.slice(-500)
       };
     }
     try {
-      return JSON.parse(result.stdout.trim());
+      const parsed = JSON.parse(result.stdout.trim()) as {ok?:boolean;updateTypes?:unknown};
+      return {
+        ok: parsed.ok === true,
+        updateTypes: Array.isArray(parsed.updateTypes) ?
+          parsed.updateTypes.filter((item):item is string=>typeof item==="string") : []
+      };
     } catch {
       return { ok: false, error: "ACP_PROBE_INVALID_OUTPUT" };
     }
