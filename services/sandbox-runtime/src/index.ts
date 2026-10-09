@@ -211,22 +211,26 @@ export class SessionSandbox extends DurableObject<Env> {
     }
   }
 
+  private async appendAcpEvent(message:Record<string,unknown>):Promise<number>{
+    return this.ctx.storage.transaction(async tx=>{
+      const seq=(await tx.get<number>("acp:seq")??0)+1;
+      await tx.put("acp:seq",seq);
+      await tx.put("acp:event:"+seq.toString().padStart(12,"0"),{
+        seq,at:new Date().toISOString(),message
+      });
+      // Bound storage growth while preserving a replay window.
+      if(seq>5_000)await tx.delete("acp:event:"+(seq-5_000).toString().padStart(12,"0"));
+      return seq;
+    });
+  }
   /** Capture ACP notifications before forwarding them to the browser. */
-  private async recordAcpOutput(text: string) {
+  private async recordAcpOutput(text: string):Promise<number|undefined> {
     if (text.length > 128_000) return;
     let message: Record<string, unknown>;
     try { message = JSON.parse(text); } catch { return; }
     if (!message || typeof message !== "object") return;
     if (message.method === "session/update") {
-      await this.ctx.storage.transaction(async tx => {
-        const seq = (await tx.get<number>("acp:seq") ?? 0) + 1;
-        await tx.put("acp:seq", seq);
-        await tx.put("acp:event:" + seq.toString().padStart(12,"0"),{
-          seq,
-          at:new Date().toISOString(),
-          message
-        });
-      });
+      return this.appendAcpEvent(message);
     } else if (message.result && typeof message.result === "object" &&
       !Array.isArray(message.result) &&
       typeof (message.result as Record<string,unknown>).sessionId === "string") {
@@ -243,8 +247,11 @@ export class SessionSandbox extends DurableObject<Env> {
     const items=await this.ctx.storage.list<{
       seq:number;at:string;message:Record<string,unknown>;
     }>({prefix:"acp:event:"});
-    const events=[...items.values()].filter(x=>x.seq>after).sort((a,b)=>a.seq-b.seq).slice(0,300);
-    return {events,cursor:events.at(-1)?.seq??after};
+    const sorted=[...items.values()].sort((a,b)=>a.seq-b.seq);
+    const earliest=sorted[0]?.seq??0;
+    const events=sorted.filter(x=>x.seq>after).slice(0,300);
+    return {events,cursor:events.at(-1)?.seq??after,earliest,
+      gap:earliest>0&&earliest>after+1};
   }
   async attachAcp(request: Request,ticket:AcpTicket):Promise<Response> {
     const container=this.container();
@@ -295,17 +302,38 @@ export class SessionSandbox extends DurableObject<Env> {
     let delivery=Promise.resolve();
     backend.addEventListener("message",event=>{
       delivery=delivery.then(async()=>{
-        if(typeof event.data==="string")await this.recordAcpOutput(event.data);
-        if(bridge.readyState===WebSocket.OPEN)bridge.send(event.data);
+        const seq=typeof event.data==="string"?
+          await this.recordAcpOutput(event.data):undefined;
+        if(bridge.readyState===WebSocket.OPEN){
+          bridge.send(event.data);
+          if(seq!==undefined)bridge.send(JSON.stringify({
+            jsonrpc:"2.0",method:"grokbot/event_cursor",params:{seq}
+          }));
+        }
       }).catch(()=>{
         try{bridge.close(1011,"ACP event recording failed");}catch{}
       });
     });
+    let dispatch=Promise.resolve();
     bridge.addEventListener("message",event=>{
-      if(typeof event.data!=="string"||event.data.length>1_000_000) {
+      if(typeof event.data!=="string"||event.data.length>128_000) {
         bridge.close(1009,"Message too large or invalid");return;
       }
-      if(backend.readyState===WebSocket.OPEN)backend.send(event.data);
+      const raw=event.data;
+      dispatch=dispatch.then(async()=>{
+        let seq:number|undefined;
+        try{
+          const message=JSON.parse(raw) as Record<string,unknown>;
+          if(message.method==="session/prompt")seq=await this.appendAcpEvent(message);
+        }catch{}
+        if(backend.readyState===WebSocket.OPEN)backend.send(raw);
+        if(seq!==undefined && bridge.readyState===WebSocket.OPEN)
+          bridge.send(JSON.stringify({
+            jsonrpc:"2.0",method:"grokbot/event_cursor",params:{seq}
+          }));
+      }).catch(()=>{
+        try{bridge.close(1011,"ACP dispatch failed");}catch{}
+      });
     });
     const close=(code:number)=>()=>{
       try{backend.close(code,"Peer disconnected");}catch{}
