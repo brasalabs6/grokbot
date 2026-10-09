@@ -1,7 +1,7 @@
 import "server-only";
 
 /** Fail-closed server-to-server client for the Cloudflare Sandbox control plane. */
-const ACTIONS = ["status","start","stop","acp-smoke","acp-events"] as const;
+const ACTIONS = ["status","start","stop","acp-smoke","acp-events","files"] as const;
 export type RuntimeAction = typeof ACTIONS[number];
 export type RuntimeStatus = {running:boolean;generation:number;acpSessionId?:string|null;acpHealthyGeneration?:number;snapshotId?:string|null;lastRun?:{runId:string;generation:number;status:"SUCCEEDED"|"FAILED"|"CANCELLED";endedAt:number}|null;activeRun?:{runId:string;generation:number;startedAt:number}|null};
 export type RuntimeStartResult = {running:boolean;generation:number;idempotent:boolean};
@@ -79,3 +79,17 @@ export const getRuntimeAcpEvents=(sessionId:string,after:number)=>
   callRuntime<{events:{seq:number;at:string;message:Record<string,unknown>}[];cursor:number}>(
     sessionId,"acp-events",{after}
   );
+
+export type SandboxWorkspaceItem={
+  name:string;type:"file"|"directory"|"symlink"|"other";
+  size:number;modifiedAt:string;
+};
+export type SandboxWorkspaceResponse={
+  ok:boolean;kind?:"file"|"directory";path?:string;
+  content?:string;items?:SandboxWorkspaceItem[];
+  truncated?:boolean;total?:number;size?:number;
+  error?:{code:string};
+};
+export const inspectSandboxWorkspace=(
+  sessionId:string,operation:"list"|"read",path:string
+)=>callRuntime<SandboxWorkspaceResponse>(sessionId,"files",{op:operation,path});
