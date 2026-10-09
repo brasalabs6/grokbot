@@ -3,7 +3,7 @@ import "server-only";
 /** Fail-closed server-to-server client for the Cloudflare Sandbox control plane. */
 const ACTIONS = ["status","start","stop","acp-smoke","acp-events"] as const;
 export type RuntimeAction = typeof ACTIONS[number];
-export type RuntimeStatus = {running:boolean;generation:number;acpSessionId?:string|null;acpHealthyGeneration?:number;snapshotId?:string|null};
+export type RuntimeStatus = {running:boolean;generation:number;acpSessionId?:string|null;acpHealthyGeneration?:number;snapshotId?:string|null;lastRun?:{runId:string;generation:number;status:"SUCCEEDED"|"FAILED"|"CANCELLED";endedAt:number}|null;activeRun?:{runId:string;generation:number;startedAt:number}|null};
 export type RuntimeStartResult = {running:boolean;generation:number;idempotent:boolean};
 export type RuntimeStopResult = {running:boolean;snapshotId?:string|null;idempotent?:boolean};
 
