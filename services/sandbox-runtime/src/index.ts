@@ -1,6 +1,7 @@
 export { WorkersAIGateway } from "./ai-gateway";
 import { DurableObject } from "cloudflare:workers";
 import { isUuid, type TerminalTicket, verifyTerminalTicket } from "./ticket";
+import {verifyAcpTicket,type AcpTicket} from "./acp-ticket";
 
 interface Env {
   APP_ORIGIN?: string;
@@ -41,6 +42,7 @@ export class SessionSandbox extends DurableObject<Env> {
     return {
       generation: (await this.ctx.storage.get<number>("generation")) ?? 0,
       running: container.running,
+      acpSessionId: (await this.ctx.storage.get<string>("acpSessionId")) ?? null,
       snapshotId: (await this.ctx.storage.get<string>("snapshotId")) ?? null,
     };
   }
@@ -67,15 +69,23 @@ export class SessionSandbox extends DurableObject<Env> {
         "api.cloudflare.com",
         this.ctx.exports.WorkersAIGateway({ props: {} })
       );
+      let agentSecret=await this.ctx.storage.get<string>("grokAgentSecret");
+      if(!agentSecret) {
+        agentSecret=crypto.randomUUID()+crypto.randomUUID();
+        await this.ctx.storage.put("grokAgentSecret",agentSecret);
+      }
       const snapshotId = await this.ctx.storage.get<string>("snapshotId");
       container.start(
         snapshotId
-          ? { containerSnapshot: { id: snapshotId }, enableInternet: false }
+          ? { containerSnapshot: { id: snapshotId }, enableInternet: false,
+              env: {GROK_AGENT_SECRET: agentSecret}
+            }
           : {
               enableInternet: false,
               image: container.images.grok,
               env: {
-                NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt"
+                NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
+                GROK_AGENT_SECRET:agentSecret
               }
             }
       );
