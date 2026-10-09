@@ -393,7 +393,7 @@ export async function recordProvisionedSandbox(args:{
           isNull(agentSession.deletedAt))
     ).for("update");
     if(!existing)return null;
-    if(existing.state!=="PROVISIONING"||existing.stateVersion!==args.expectedVersion)
+    if(!["PROVISIONING","RESUMING"].includes(existing.state)||existing.stateVersion!==args.expectedVersion)
       throw new AgentConflict("VERSION_CONFLICT");
     if(args.generation<existing.generation)
       throw new AgentConflict("GENERATION_CONFLICT");
@@ -472,7 +472,7 @@ export async function confirmAgentReady(args:{
     if(session.generation!==args.generation)
       throw new AgentConflict("GENERATION_CONFLICT");
     if(session.state==="READY"||session.state==="IDLE")return session;
-    if(session.state!=="PROVISIONING"&&session.state!=="RECOVERING")
+    if(!["PROVISIONING","RECOVERING","RESUMING"].includes(session.state))
       throw new AgentConflict("SESSION_NOT_READY");
     const [updated]=await tx.update(agentSession).set({
       state:"READY",stateVersion:session.stateVersion+1,updatedAt:new Date()
