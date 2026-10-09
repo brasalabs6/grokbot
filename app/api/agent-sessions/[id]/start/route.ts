@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
-import { AgentConflict, getAgentSession, recordProvisionedSandbox, setAgentSessionState } from "@/lib/db/agent-queries";
+import {
+  AgentConflict,claimStartOperation,recordProvisionedSandbox,
+  recordStartOperationStatus,setAgentSessionState
+} from "@/lib/db/agent-queries";
 import { RuntimeApiError, startRuntime } from "@/lib/agent/runtime-client";
 
 const inputSchema=z.object({
@@ -9,11 +12,7 @@ const inputSchema=z.object({
 }).strict();
 type Params={params:Promise<{id:string}>};
 
-/**
- * P02 provisional endpoint: starts a container but deliberately stays in
- * PROVISIONING until the long-lived ACP adapter passes its health gate.
- * It must not claim READY after a container.start() acknowledgement.
- */
+/** Starts a sandbox but does not claim ACP READY until a persistent agent is healthy. */
 export async function POST(request:Request,{params}:Params){
   const logged=await auth();
   if(!logged?.user||logged.user.type==="guest")
@@ -27,51 +26,59 @@ export async function POST(request:Request,{params}:Params){
   if(!z.uuid().safeParse(id).success)
     return Response.json({error:{code:"NOT_FOUND"}},{status:404});
   const input=inputSchema.safeParse(await request.json().catch(()=>null));
-  if(!input.success)return Response.json({error:{code:"VALIDATION_ERROR"}},{status:400});
-  const session=await getAgentSession(id,logged.user.id);
-  if(!session)return Response.json({error:{code:"NOT_FOUND"}},{status:404});
-  if(session.state!=="CREATED")
-    return Response.json({error:{code:"SESSION_NOT_STARTABLE",state:session.state}},{status:409});
-  if(session.stateVersion!==input.data.expectedSessionVersion)
-    return Response.json({error:{code:"VERSION_CONFLICT"}},{status:409});
+  if(!input.success)
+    return Response.json({error:{code:"VALIDATION_ERROR"}},{status:400});
 
   let claimed;
-  try{
-    claimed=await setAgentSessionState({
-      sessionId:id,ownerId:logged.user.id,from:"CREATED",
-      to:"PROVISIONING",version:session.stateVersion,generation:session.generation
+  try {
+    claimed=await claimStartOperation({
+      sessionId:id,ownerId:logged.user.id,operationId:input.data.operationId,
+      expectedVersion:input.data.expectedSessionVersion
     });
-  }catch(error){
+  } catch(error) {
     if(error instanceof AgentConflict)
       return Response.json({error:{code:error.code}},{status:409});
     throw error;
   }
+  if(!claimed)return Response.json({error:{code:"NOT_FOUND"}},{status:404});
+  if(!claimed.claimed) {
+    // Replay of an accepted operation: DO NOT dispatch a second start request.
+    return Response.json({
+      sessionId:id,operationId:claimed.operation.id,
+      operationState:claimed.operation.state,
+      state:claimed.session.state,idempotent:true
+    },{status:202});
+  }
 
-  try{
+  try {
     const runtime=await startRuntime(id,input.data.operationId);
     if(!runtime.running||!Number.isSafeInteger(runtime.generation)||runtime.generation<1)
       throw new RuntimeApiError("RUNTIME_START_UNCONFIRMED",502);
     const updated=await recordProvisionedSandbox({
       sessionId:id,ownerId:logged.user.id,
-      expectedVersion:claimed.stateVersion,generation:runtime.generation
+      expectedVersion:claimed.session.stateVersion,generation:runtime.generation
+    });
+    await recordStartOperationStatus({
+      operationId:input.data.operationId,sessionId:id,status:"EXECUTING"
     });
     return Response.json({
       sessionId:id,state:updated?.state??"PROVISIONING",
       generation:runtime.generation,operationId:input.data.operationId,
-      message:"Sandbox requested; awaiting persistent ACP initialization."
+      message:"Container start requested; waiting for persistent ACP readiness."
     },{status:202});
-  }catch(error){
-    // A timeout may have started the container: do not assume it is stopped.
+  } catch(error) {
+    // Uncertain remote outcomes are never automatically retried.
     const uncertain=error instanceof RuntimeApiError &&
       ["RUNTIME_TIMEOUT","RUNTIME_UNREACHABLE"].includes(error.code);
-    try{
-      await setAgentSessionState({
-        sessionId:id,ownerId:logged.user.id,from:"PROVISIONING",
-        to:uncertain?"RECOVERING":"FAILED",version:claimed.stateVersion
-      });
-    }catch{
-      // A reconciliation workflow must resolve a concurrently updated state.
-    }
+    await recordStartOperationStatus({
+      operationId:input.data.operationId,sessionId:id,
+      status:uncertain?"OUTCOME_UNKNOWN":"FAILED"
+    }).catch(()=>null);
+    await setAgentSessionState({
+      sessionId:id,ownerId:logged.user.id,from:"PROVISIONING",
+      to:uncertain?"RECOVERING":"FAILED",
+      version:claimed.session.stateVersion
+    }).catch(()=>null);
     return Response.json({
       error:{code:uncertain?"RUNTIME_OUTCOME_UNKNOWN":
         error instanceof RuntimeApiError?error.code:"RUNTIME_START_FAILED"}
