@@ -175,6 +175,19 @@ export class SessionSandbox extends DurableObject<Env> {
     }
   }
 
+  /** Read-only, path-confined workspace browser. No arbitrary shell strings. */
+  async workspaceOperation(op:"list"|"read",path:string) {
+    if(!this.container().running)return {ok:false,error:{code:"CONTAINER_STOPPED"}};
+    if(!["list","read"].includes(op)||typeof path!=="string"||path.length>1024)
+      return {ok:false,error:{code:"INVALID_WORKSPACE_INPUT"}};
+    const result=await this.exec(["node","/opt/grokbot/workspace.mjs",op,path]);
+    try{
+      const parsed=JSON.parse(result.stdout);
+      if(!parsed||typeof parsed!=="object"||typeof parsed.ok!=="boolean")
+        return {ok:false,error:{code:"INVALID_WORKSPACE_OUTPUT"}};
+      return parsed;
+    }catch{return {ok:false,error:{code:"WORKSPACE_UNAVAILABLE"}};}
+  }
   async stop(operationId: string, checkpoint: boolean) {
     return this.ctx.blockConcurrencyWhile(async () => {
       const container = this.container();
@@ -617,6 +630,10 @@ export default {
       > | null;
       if (!body) {
         return error("INVALID_JSON", 400);
+      }
+      if(parts[2]==="files"&&(body.op==="list"||body.op==="read")&&
+        typeof body.path==="string") {
+        return Response.json(await sandbox.workspaceOperation(body.op,body.path));
       }
       if (parts[2] === "acp-smoke" && body.confirm === true) {
         return Response.json(await sandbox.acpSmoke());
