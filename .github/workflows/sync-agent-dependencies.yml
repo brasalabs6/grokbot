@@ -1,0 +1,37 @@
+name: Lock GrokBot terminal dependencies
+on:
+  push:
+    branches: [feat/grokbot-p00-acp-cloudflare-spike]
+    paths: [package.json]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: agent-dependency-lock-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lock:
+    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Generate lockfile on GitHub
+        run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+      - name: Commit only pnpm-lock.yaml on this feature branch
+        run: |
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'build: sync terminal dependencies lockfile'
+          git push origin HEAD:feat/grokbot-p00-acp-cloudflare-spike
