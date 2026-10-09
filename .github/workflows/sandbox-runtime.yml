@@ -1,0 +1,50 @@
+name: Sandbox runtime validation
+on:
+  pull_request:
+    paths:
+      - "services/sandbox-runtime/**"
+      - "lib/agent/**"
+      - "tests/unit/agent-contracts.test.ts"
+      - ".github/workflows/sandbox-runtime.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/sandbox-runtime/**"
+      - "lib/agent/**"
+      - "tests/unit/agent-contracts.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install sandbox runtime
+        working-directory: services/sandbox-runtime
+        run: pnpm install --frozen-lockfile
+      - name: Generate Cloudflare runtime types
+        working-directory: services/sandbox-runtime
+        run: pnpm exec wrangler types
+      - name: Typecheck Cloudflare code
+        working-directory: services/sandbox-runtime
+        run: pnpm check
+
+  container-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Grok runtime image
+        run: docker build --progress=plain -f services/sandbox-runtime/Dockerfile services/sandbox-runtime
+      - name: Check ACP probe syntax
+        run: node --check services/sandbox-runtime/tools/acp-smoke.mjs
