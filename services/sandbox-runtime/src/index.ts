@@ -266,11 +266,21 @@ export class SessionSandbox extends DurableObject<Env> {
     if(!secret)return error("ACP_SERVER_NOT_CONFIGURED",503);
     let upstream:Response;
     try {
-      upstream=await container.getTcpPort(2419).fetch(
-        new Request("http://container/ws?server-key="+encodeURIComponent(secret),{
-          headers:{"Upgrade":"websocket"},
-        })
-      );
+      // Forward the original upgrade handshake, including its WebSocket key
+      // and version. A synthesized Request with only "Upgrade" is insufficient.
+      const url=new URL(request.url);
+      url.protocol="http:";
+      url.host="container";
+      url.pathname="/ws";
+      url.search="?server-key="+encodeURIComponent(secret);
+      const forwarded=new Request(url.toString(),request);
+      forwarded.headers.delete("host");
+      forwarded.headers.delete("authorization");
+      forwarded.headers.delete("cookie");
+      forwarded.headers.delete("origin");
+      // Do not disclose the browser's one-time ticket to the Grok process.
+      forwarded.headers.delete("sec-websocket-protocol");
+      upstream=await container.getTcpPort(2419).fetch(forwarded);
     }catch{return error("ACP_SERVER_UNREACHABLE",503);}
     if(upstream.status!==101||!upstream.webSocket) {
       return error("ACP_SERVER_NOT_READY",503);
