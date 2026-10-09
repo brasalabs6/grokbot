@@ -106,6 +106,24 @@ export class SessionSandbox extends DurableObject<Env> {
       stdout: new TextDecoder().decode(result.stdout).slice(0, 128_000),
     };
   }
+  /** Privileged one-off proof of real Grok + ACP + Workers AI tool execution. */
+  async acpSmoke() {
+    const result = await this.exec(["node", "/opt/grokbot/acp-smoke.mjs"]);
+    if (result.exitCode !== 0) {
+      return {
+        ok: false,
+        error: "ACP_PROBE_FAILED",
+        stderr: result.stderr.slice(-500),
+        stdout: result.stdout.slice(-500)
+      };
+    }
+    try {
+      return JSON.parse(result.stdout.trim());
+    } catch {
+      return { ok: false, error: "ACP_PROBE_INVALID_OUTPUT" };
+    }
+  }
+
   async stop(operationId: string, checkpoint: boolean) {
     return this.ctx.blockConcurrencyWhile(async () => {
       const container = this.container();
@@ -267,6 +285,9 @@ export default {
       > | null;
       if (!body) {
         return error("INVALID_JSON", 400);
+      }
+      if (parts[2] === "acp-smoke" && body.confirm === true) {
+        return Response.json(await sandbox.acpSmoke());
       }
       if (parts[2] === "start" && isUuid(body.operationId)) {
         return Response.json(await sandbox.start(body.operationId));
