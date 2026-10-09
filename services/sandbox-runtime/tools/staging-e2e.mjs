@@ -131,6 +131,61 @@ async function connectAcp(generation) {
   return {ws,rpc,seen,protocolReady};
 }
 
+/** Validate the remote PTY's actual execution and tmux state across reconnects. */
+async function checkTerminal(generation) {
+  const terminalId = randomUUID();
+  const marker = "TERM_" + randomUUID().replaceAll("-", "").slice(0, 12);
+  const file = "grokbot-terminal-proof.txt";
+  async function connect() {
+    const token = sign({
+      purpose:"terminal",sessionId,userId,terminalId,generation,
+      exp:Date.now()+45_000,jti:randomUUID()
+    });
+    const endpoint = new URL("/ws/terminal/"+sessionId, url);
+    endpoint.protocol="wss:";
+    endpoint.searchParams.set("session",terminalId);
+    endpoint.searchParams.set("cols","80");
+    endpoint.searchParams.set("rows","25");
+    const ws = new WebSocket(endpoint.toString(),["grokbot-ticket."+token]);
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error("PTY_SOCKET_TIMEOUT")),20_000);
+      ws.addEventListener("open",()=>{clearTimeout(timer);resolve();},{once:true});
+      ws.addEventListener("error",()=>{clearTimeout(timer);reject(new Error("PTY_SOCKET_ERROR"));},{once:true});
+    });
+    return ws;
+  }
+  async function fileMatches(path,value){
+    for(let attempt=0;attempt<24;attempt++){
+      try {
+        const result=await internal("POST","files",{op:"read",path},10_000);
+        if(result.ok&&result.content?.trim()===value)return;
+      }catch{}
+      await new Promise(resolve=>setTimeout(resolve,600));
+    }
+    throw new Error("PTY_EXECUTION_PROOF_MISSING");
+  }
+  const first=await connect();
+  try {
+    // The marker is verified by reading a newly-written real workspace file,
+    // not by matching the echoed text in the terminal transcript.
+    await new Promise(resolve=>setTimeout(resolve,700));
+    first.send(new TextEncoder().encode(
+      "export GROKBOT_TERM_PROOF="+marker+"; printf '%s\\n' \"$GROKBOT_TERM_PROOF\" > "+
+      "/workspace/"+file+"\n"
+    ));
+    await fileMatches(file,marker);
+  } finally {first.close();}
+  await new Promise(resolve=>setTimeout(resolve,800));
+  const second=await connect();
+  try {
+    second.send(new TextEncoder().encode(
+      "printf '%s\\n' \"$GROKBOT_TERM_PROOF\" > /workspace/grokbot-terminal-reconnect.txt\n"
+    ));
+    await fileMatches("grokbot-terminal-reconnect.txt",marker);
+  } finally {second.close();}
+  console.log("STAGING_PTY_TMUX_RECONNECT_E2E_PASSED");
+}
+
 let startAttempted = false;
 let cleanupError = false;
 try {
@@ -149,6 +204,7 @@ try {
     throw new Error("GROK_CLI_NOT_READY");
   console.log("STAGING_CONTAINER_STARTED generation="+generation);
 
+  await checkTerminal(generation);
   const {ws,rpc,seen}=await connectAcp(generation);
   try {
     const created=await rpc("session/new",{
