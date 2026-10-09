@@ -35,9 +35,8 @@ const finished = new Promise((resolve, reject) => {
     if (value.result?.protocolVersion !== 1) {
       return finish(new Error("Unexpected protocolVersion"));
     }
-    if (!value.result?.agentInfo?.name) {
-      return finish(new Error("Missing agentInfo"));
-    }
+    // agentInfo is optional: capability negotiation + a valid protocol version
+    // are the interoperability gates for an ACP WebSocket handshake.
     gotInitialize = true;
     finish(null);
   });
