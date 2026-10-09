@@ -3,13 +3,47 @@
   "name": "grokbot-sandbox-runtime-staging",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-09",
-  "observability": {"enabled":true},
-  "containers": [{
-    "class_name": "SessionSandbox",
-    "scheduling_policy": "durable_object",
-    "images": {"grok": {"dockerfile":"./Dockerfile"}}
-  }],
-  "durable_objects": {"bindings":[{"name":"SANDBOXES","class_name":"SessionSandbox"}]},
-  "exports": {"SessionSandbox": {"type":"durable-object","storage":"sqlite"}},
-  "secrets": {"required":["CONTROL_PLANE_SERVICE_SECRET","RUNTIME_TICKET_SECRET"]}
+  "observability": {
+    "enabled": true
+  },
+  "containers": [
+    {
+      "class_name": "SessionSandbox",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "grok": {
+          "dockerfile": "./Dockerfile"
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SANDBOXES",
+        "class_name": "SessionSandbox"
+      }
+    ]
+  },
+  "exports": {
+    "SessionSandbox": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "secrets": {
+    "required": [
+      "CONTROL_PLANE_SERVICE_SECRET",
+      "RUNTIME_TICKET_SECRET"
+    ]
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "vars": {
+    "CF_ACCOUNT_ID": "a22f860070e687304a08ce46118dadf6"
+  },
+  "ai": {
+    "binding": "AI"
+  }
 }
