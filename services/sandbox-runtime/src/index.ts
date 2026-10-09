@@ -78,6 +78,8 @@ export class SessionSandbox extends DurableObject<Env> {
       running: container.running,
       acpSessionId: (await this.ctx.storage.get<string>("acpSessionId")) ?? null,
       acpHealthyGeneration: (await this.ctx.storage.get<number>("acpHealthyGeneration")) ?? 0,
+      lastRun: (await this.ctx.storage.get<{runId:string;generation:number;status:string;endedAt:number}>("run:last"))??null,
+      activeRun: (await this.ctx.storage.get<{runId:string;generation:number;startedAt:number}>("run:active"))??null,
       snapshotId: (await this.ctx.storage.get<string>("snapshotId")) ?? null,
     };
   }
