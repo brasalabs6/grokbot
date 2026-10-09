@@ -251,14 +251,50 @@ export function AcpChat({ sessionId, active }: { sessionId: string; active: bool
     if(!text||!session.current||busy||!connected)return;
     setBusy(true);
     setError(null);
-    setDraft("");
-    setEntries(prev=>[...prev,{id:crypto.randomUUID(),role:"user",text}]);
+    let accepted=false;
     try {
-      await rpc("session/prompt",{
-        sessionId:session.current,prompt:[{type:"text",text}]
+      const current=await fetch("/api/agent-sessions/"+sessionId,{
+        cache:"no-store"
       });
+      const record=await current.json() as {
+        session?:{state:string;stateVersion:number};
+        error?:{code?:string};
+      };
+      if(!current.ok||!record.session)
+        throw new Error(record.error?.code??"SESSION_UNAVAILABLE");
+      if(!["READY","IDLE"].includes(record.session.state))
+        throw new Error("SESSION_NOT_READY");
+      const messageId=crypto.randomUUID();
+      const parts=[{type:"text",text}];
+      const submitted=await fetch("/api/agent-sessions/"+sessionId+"/runs",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          clientMessageId:messageId,
+          expectedSessionVersion:record.session.stateVersion,
+          parts
+        })
+      });
+      const reservation=await submitted.json() as {
+        runId?:string;permit?:string;error?:{code?:string};
+      };
+      if(!submitted.ok||!reservation.permit||!reservation.runId)
+        throw new Error(reservation.error?.code??"RUN_NOT_ACCEPTED");
+      // The reservation is now authoritative. Never auto-retry the prompt:
+      // a disconnect may mean the agent is still running inside Cloudflare.
+      accepted=true;
+      setDraft("");
+      setEntries(prev=>[...prev,{id:crypto.randomUUID(),role:"user",text}]);
+      await rpc("grokbot/dispatch",{
+        sessionId:session.current,prompt:parts,permit:reservation.permit
+      });
+      // Reconcile via trusted Cloudflare control-plane evidence.
+      void fetch("/api/agent-sessions/"+sessionId+"/runs/"+
+        reservation.runId+"/reconcile",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:"{}"}).catch(()=>{});
     }catch(err) {
-      setError(err instanceof Error?err.message:"PROMPT_FAILED");
+      setError((err instanceof Error?err.message:"PROMPT_FAILED")+
+        (accepted?" — outcome may be unknown; check activity before retrying.":""));
     }finally{setBusy(false);}
   }
   function cancel() {
