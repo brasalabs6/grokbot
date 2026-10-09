@@ -7,7 +7,7 @@ on:
       - "app/api/agent-sessions/**"
       - "app/agent-sessions/**"
       - "components/agent-sessions/**"
-      - "tests/unit/agent-contracts.test.ts"
+      - "tests/unit/**"
       - ".github/workflows/agent-foundation.yml"
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ jobs:
       - name: Install project
         run: pnpm install --frozen-lockfile
       - name: Agent state and event contract tests
-        run: pnpm exec tsx --test tests/unit/agent-contracts.test.ts
+        run: pnpm exec tsx --test tests/unit/*.test.ts
       - name: Verify no TypeScript regressions in new agent modules
         shell: bash
         run: |
