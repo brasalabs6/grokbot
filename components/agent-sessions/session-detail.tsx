@@ -6,6 +6,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 type Panel = "chat" | "terminal" | "files" | "activity";
@@ -14,13 +15,41 @@ export function SessionDetail({
   initialState,
   generation,
   modelId,
+  stateVersion,
 }: {
   id: string;
   initialState: string;
   generation: number;
   modelId: string;
+  stateVersion: number;
 }) {
+  const router = useRouter();
   const [panel, setPanel] = useState<Panel>("chat");
+  const [startBusy,setStartBusy] = useState(false);
+  const [startError,setStartError] = useState<string|null>(null);
+  const [currentState,setCurrentState] = useState(initialState);
+  async function startContainer() {
+    setStartBusy(true);
+    setStartError(null);
+    try {
+      const response=await fetch("/api/agent-sessions/"+id+"/start",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          operationId:crypto.randomUUID(),
+          expectedSessionVersion:stateVersion
+        })
+      });
+      const result=await response.json() as {error?:{code?:string};state?:string};
+      if(!response.ok)throw new Error(result.error?.code??"RUNTIME_START_FAILED");
+      setCurrentState(result.state??"PROVISIONING");
+      router.refresh();
+    } catch(error) {
+      setStartError(error instanceof Error?error.message:"Unexpected error");
+    } finally {
+      setStartBusy(false);
+    }
+  }
   const [events, setEvents] = useState<
     { seq: number; type: string; createdAt: string }[]
   >([]);
@@ -89,10 +118,19 @@ export function SessionDetail({
           <div className="grid flex-1 place-content-center text-center">
             <h2 className="font-semibold">Agent not connected</h2>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              State: {initialState}. Sending prompts is disabled until
+              State: {currentState}. Sending prompts is disabled until
               Cloudflare provisioning and the ACP handshake are verified. The
               legacy chatbot remains available separately.
             </p>
+            {currentState==="CREATED" && (
+              <Button className="mx-auto mt-4" disabled={startBusy}
+                onClick={()=>void startContainer()}>
+                {startBusy?"Requesting sandbox…":"Provision Cloudflare sandbox"}
+              </Button>
+            )}
+            {startError&&<p role="alert" className="mt-3 text-sm text-red-500">
+              {startError}
+            </p>}
           </div>
         )}
         {panel === "terminal" && (
