@@ -31,6 +31,39 @@ export class SessionSandbox extends DurableObject<Env> {
       );
     }
   }
+  /**
+   * WebSocket responses cannot traverse Durable Object RPC method serialization.
+   * The fetch() path preserves upgrade semantics end-to-end.
+   */
+  async fetch(request:Request):Promise<Response> {
+    const url=new URL(request.url);
+    const parts=url.pathname.split("/").filter(Boolean);
+    if(request.method!=="GET"||request.headers.get("Upgrade")?.toLowerCase()!=="websocket")
+      return error("WEBSOCKET_REQUIRED",426);
+    if(parts.length!==3||parts[0]!=="ws"||!isUuid(parts[2]))
+      return error("NOT_FOUND",404);
+    if(this.env.APP_ORIGIN&&request.headers.get("Origin")!==this.env.APP_ORIGIN)
+      return error("INVALID_ORIGIN",403);
+    const protocols=request.headers.get("Sec-WebSocket-Protocol")
+      ?.split(",").map(x=>x.trim())??[];
+    if(parts[1]==="acp") {
+      const encoded=protocols.find(x=>x.startsWith("grokbot-acp."))
+        ?.slice("grokbot-acp.".length);
+      const ticket=encoded?await verifyAcpTicket(encoded,this.env.RUNTIME_TICKET_SECRET):null;
+      if(!ticket||ticket.sessionId!==parts[2])
+        return error("INVALID_ACP_TICKET",401);
+      return this.attachAcp(request,ticket);
+    }
+    if(parts[1]==="terminal") {
+      const encoded=protocols.find(x=>x.startsWith("grokbot-ticket."))
+        ?.slice("grokbot-ticket.".length);
+      const ticket=encoded?await verifyTerminalTicket(encoded,this.env.RUNTIME_TICKET_SECRET):null;
+      if(!ticket||ticket.sessionId!==parts[2])
+        return error("INVALID_TERMINAL_TICKET",401);
+      return this.attachTerminal(request,ticket);
+    }
+    return error("NOT_FOUND",404);
+  }
   private container() {
     if (!this.ctx.container) {
       throw new Error("CONTAINER_BINDING_MISSING");
@@ -382,7 +415,7 @@ export default {
       const ticket=token?await verifyAcpTicket(token,env.RUNTIME_TICKET_SECRET):null;
       if(!ticket||ticket.sessionId!==parts[2])
         return error("INVALID_ACP_TICKET",401);
-      return env.SANDBOXES.getByName("grokbot-"+ticket.sessionId).attachAcp(request,ticket);
+      return env.SANDBOXES.getByName("grokbot-"+ticket.sessionId).fetch(request);
     }
     if (parts[0] === "ws" && parts[1] === "terminal" && parts.length === 3) {
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -407,7 +440,7 @@ export default {
       }
       return env.SANDBOXES.getByName(
         `grokbot-${ticket.sessionId}`
-      ).attachTerminal(request, ticket);
+      ).fetch(request);
     }
     if (parts[0] !== "internal" || parts.length !== 3 || !isUuid(parts[1])) {
       return error("NOT_FOUND", 404);
