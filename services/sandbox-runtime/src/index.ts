@@ -1,3 +1,4 @@
+export { WorkersAIGateway } from "./ai-gateway";
 import { DurableObject } from "cloudflare:workers";
 import { isUuid, type TerminalTicket, verifyTerminalTicket } from "./ticket";
 
@@ -60,11 +61,23 @@ export class SessionSandbox extends DurableObject<Env> {
       if (container.running) {
         return { ...(await this.status()), idempotent: true };
       }
+      // Inference credentials stay in trusted Worker code, outside the sandbox.
+      // All other outbound connections are blocked by enableInternet:false.
+      await container.interceptOutboundHttps(
+        "api.cloudflare.com",
+        this.ctx.exports.WorkersAIGateway({ props: {} })
+      );
       const snapshotId = await this.ctx.storage.get<string>("snapshotId");
       container.start(
         snapshotId
           ? { containerSnapshot: { id: snapshotId }, enableInternet: false }
-          : { enableInternet: false, image: container.images.grok }
+          : {
+              enableInternet: false,
+              image: container.images.grok,
+              env: {
+                NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt"
+              }
+            }
       );
       await container.setInactivityTimeout(TIMEOUT_MS);
       const generation =
