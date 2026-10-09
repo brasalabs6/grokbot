@@ -67,3 +67,18 @@ jobs:
             sleep 1
           done
           node services/sandbox-runtime/tools/local-server-smoke.mjs
+      - name: Verify sandbox workspace confinement
+        run: |
+          node --check services/sandbox-runtime/tools/workspace.mjs
+          docker exec grokbot-acp-test sh -c 'printf test-content > /workspace/ci-file.txt'
+          docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs list . | grep 'ci-file.txt'
+          docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs read ci-file.txt | grep 'test-content'
+          if docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs read ../../etc/passwd; then
+            echo 'Workspace traversal unexpectedly permitted'
+            exit 1
+          fi
+          docker exec grokbot-acp-test ln -s /etc/passwd /workspace/escape-link
+          if docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs read escape-link; then
+            echo 'Workspace symlink escape unexpectedly permitted'
+            exit 1
+          fi
