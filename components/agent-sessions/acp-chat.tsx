@@ -182,6 +182,12 @@ export function AcpChat({ sessionId, active }: { sessionId: string; active: bool
                 reconnectAttempt=0;
                 setConnected(true);
                 setError(null);
+                // The control plane promotes READY only after its own
+                // generation-matched ACP health proof, never on client say-so.
+                void fetch("/api/agent-sessions/"+sessionId+"/reconcile",{
+                  method:"POST",headers:{"Content-Type":"application/json"},
+                  body:"{}",cache:"no-store"
+                }).catch(()=>{});
               }
             }catch(err){
               if(!disposed)setError(err instanceof Error?err.message:"ACP_INIT_FAILED");
