@@ -48,5 +48,6 @@ WORKDIR /workspace
 # Each container serves ACP locally. The token is randomly generated per
 # Durable Object and passed through container.start(). No public port binding.
 EXPOSE 2419
+COPY --chown=node:node tools/workspace.mjs /opt/grokbot/workspace.mjs
 COPY --chown=node:node tools/run-grok.sh /opt/grokbot/run-grok.sh
 CMD ["sh","/opt/grokbot/run-grok.sh"]
