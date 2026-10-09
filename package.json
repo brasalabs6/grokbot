@@ -37,6 +37,8 @@
     "@vercel/blob": "^0.24.1",
     "@vercel/functions": "^3.7.5",
     "@vercel/otel": "^1.12.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "ai": "7.0.15",
     "bcrypt-ts": "^8.0.1",
     "botid": "^1.5.11",
