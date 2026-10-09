@@ -1,6 +1,8 @@
 name: Deploy GrokBot sandbox staging
 on:
   workflow_dispatch:
+  push:
+    branches: [feat/grokbot-p00-acp-cloudflare-spike]
 permissions:
   contents: read
 concurrency:
@@ -9,7 +11,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy isolated staging runtime
-    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike'
+    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-staging]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: staging
