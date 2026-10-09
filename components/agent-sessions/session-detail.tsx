@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AcpChat } from "./acp-chat";
+import { AgentTerminal } from "./agent-terminal";
 
 type Panel = "chat" | "terminal" | "files" | "activity";
 export function SessionDetail({
@@ -138,14 +139,8 @@ export function SessionDetail({
           </>
         )}
         {panel === "terminal" && (
-          <div className="grid flex-1 place-content-center text-center">
-            <TerminalSquare className="mx-auto mb-3 size-7 text-muted-foreground" />
-            <h2 className="font-semibold">Terminal unavailable</h2>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              A PTY will become accessible only when this session has a running
-              sandbox and a valid terminal ticket.
-            </p>
-          </div>
+          <AgentTerminal sessionId={id}
+            active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
         )}
         {panel === "files" && (
           <div className="grid flex-1 place-content-center text-center">
