@@ -2,6 +2,7 @@ export { WorkersAIGateway } from "./ai-gateway";
 import { DurableObject } from "cloudflare:workers";
 import { isUuid, type TerminalTicket, verifyTerminalTicket } from "./ticket";
 import {verifyAcpTicket,type AcpTicket} from "./acp-ticket";
+import {verifyRunPermit,promptHash} from "./run-permit";
 
 interface Env {
   APP_ORIGIN?: string;
@@ -325,6 +326,26 @@ export class SessionSandbox extends DurableObject<Env> {
       delivery=delivery.then(async()=>{
         const seq=typeof event.data==="string"?
           await this.recordAcpOutput(event.data):undefined;
+        // A server result for the active prompt is authoritative for run completion.
+        if(typeof event.data==="string"){
+          try{
+            const msg=JSON.parse(event.data) as Record<string,unknown>;
+            const active=await this.ctx.storage.get<{runId:string;rpcId:unknown;generation:number}>("run:active");
+            if(active&&msg.id!==undefined&&msg.id===active.rpcId &&
+              ("result" in msg || "error" in msg)){
+              const hasError=Boolean(msg.error);
+              const reason=msg.result&&typeof msg.result==="object"?
+                (msg.result as Record<string,unknown>).stopReason:undefined;
+              const status=hasError?"FAILED":
+                reason==="cancelled"?"CANCELLED":"SUCCEEDED";
+              await this.ctx.storage.put("run:last",{
+                runId:active.runId,generation:active.generation,
+                status,endedAt:Date.now()
+              });
+              await this.ctx.storage.delete("run:active");
+            }
+          }catch{}
+        }
         if(bridge.readyState===WebSocket.OPEN){
           bridge.send(event.data);
           if(seq!==undefined)bridge.send(JSON.stringify({
@@ -342,16 +363,65 @@ export class SessionSandbox extends DurableObject<Env> {
       }
       const raw=event.data;
       dispatch=dispatch.then(async()=>{
-        let seq:number|undefined;
-        try{
-          const message=JSON.parse(raw) as Record<string,unknown>;
-          if(message.method==="session/prompt")seq=await this.appendAcpEvent(message);
-        }catch{}
+        let message:Record<string,unknown>;
+        try {
+          message=JSON.parse(raw) as Record<string,unknown>;
+          if(!message||typeof message!=="object"||Array.isArray(message))
+            throw new Error("INVALID_RPC");
+        }catch{return;}
+        const respondError=(code:number,description:string)=>{
+          if(bridge.readyState===WebSocket.OPEN && message.id!==undefined)
+            bridge.send(JSON.stringify({jsonrpc:"2.0",id:message.id,
+              error:{code,message:description}}));
+        };
+        // Never forward an unapproved plain ACP prompt from the browser.
+        if(message.method==="session/prompt") {
+          respondError(-32003,"RUN_ADMISSION_REQUIRED");
+          return;
+        }
+        if(message.method==="grokbot/dispatch"){
+          const params=message.params as Record<string,unknown>|undefined;
+          const permit=typeof params?.permit==="string"?
+            await verifyRunPermit(params.permit,this.env.RUNTIME_TICKET_SECRET):null;
+          const prompt=params?.prompt;
+          const agentSessionId=params?.sessionId;
+          const known=await this.ctx.storage.get<string>("acpSessionId");
+          const generation=await this.ctx.storage.get<number>("generation")??0;
+          const hash=Array.isArray(prompt)?await promptHash(prompt):null;
+          if(!permit||permit.sessionId!==ticket.sessionId||
+            permit.userId!==ticket.userId||permit.generation!==generation||
+            hash!==permit.promptHash||!known||agentSessionId!==known||
+            !Array.isArray(prompt) || prompt.length===0||
+            !prompt.every(part=>part&&typeof part==="object"&&!Array.isArray(part)&&
+              part.type==="text"&&typeof part.text==="string")) {
+            respondError(-32003,"INVALID_RUN_PERMIT");
+            return;
+          }
+          const acquired=await this.ctx.storage.transaction(async tx=>{
+            if(await tx.get<boolean>("run:used:"+permit.runId))return false;
+            if(await tx.get<{runId:string}>("run:active"))return false;
+            await tx.put("run:used:"+permit.runId,true);
+            await tx.put("run:active",{runId:permit.runId,
+              rpcId:message.id,generation,startedAt:Date.now()});
+            return true;
+          });
+          if(!acquired){
+            respondError(-32004,"RUN_ALREADY_DISPATCHED_OR_ACTIVE");
+            return;
+          }
+          const forwarded={
+            jsonrpc:"2.0",id:message.id,method:"session/prompt",
+            params:{sessionId:agentSessionId,prompt}
+          };
+          await this.appendAcpEvent(forwarded);
+          if(backend.readyState!==WebSocket.OPEN){
+            respondError(-32005,"ACP_CONNECTION_LOST_OUTCOME_UNKNOWN");
+            return;
+          }
+          backend.send(JSON.stringify(forwarded));
+          return;
+        }
         if(backend.readyState===WebSocket.OPEN)backend.send(raw);
-        if(seq!==undefined && bridge.readyState===WebSocket.OPEN)
-          bridge.send(JSON.stringify({
-            jsonrpc:"2.0",method:"grokbot/event_cursor",params:{seq}
-          }));
       }).catch(()=>{
         try{bridge.close(1011,"ACP dispatch failed");}catch{}
       });
