@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AcpChat } from "./acp-chat";
 import { AgentTerminal } from "./agent-terminal";
+import { FileBrowser } from "./file-browser";
 
 type Panel = "chat" | "terminal" | "files" | "activity";
 export function SessionDetail({
@@ -143,12 +144,8 @@ export function SessionDetail({
             active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
         )}
         {panel === "files" && (
-          <div className="grid flex-1 place-content-center text-center">
-            <h2 className="font-semibold">Workspace offline</h2>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              The sandbox must be provisioned before files can be accessed.
-            </p>
-          </div>
+          <FileBrowser sessionId={id}
+            active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
         )}
         {panel === "activity" && (
           <div>
