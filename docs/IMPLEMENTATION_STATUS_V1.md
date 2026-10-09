@@ -1,43 +1,52 @@
-# GrokBot V1 — Implementation status (2026-10-09)
+# GrokBot V1 — Implementation status
 
-This document describes measured progress, not completed V1.
+Last updated: 2026-10-09. **Work in progress; no production release.**
 
-## Completed in branch feat/grokbot-p00-acp-cloudflare-spike
+## Source of truth
 
-- P00: executed `grok 1.0.50` ACP `initialize` and `session/new` successfully on the development machine; capabilities include `loadSession` and `resume`.
-- P00: local Grok prompt produced `hello.ts` and `hello.js` in an isolated scratch workspace; this exercises a local Grok custom-model configuration, **not a deployed Cloudflare container**.
-- P00: Cloudflare connected account returned success from `@cf/openai/gpt-oss-120b` and successfully produced a structured tool call with `tool_choice=required`.
-- P01 partial: shared Zod contracts, explicit session/run states, safe generation comparisons, ACP event translation, additive Drizzle schema and SQL migration, authenticated session CRUD and history/event endpoints.
-- P02 partial: Cloudflare 1.0 Durable Object controller with start/status/stop/exec, snapshot hooks, ticket-based terminal plumbing, versioned container image, Wrangler configuration; local Wrangler responds successfully to `GET /health`.
-- UI partial: authenticated session dashboard and state-aware detail tabs. Composer and terminal are intentionally disabled until backend integration is operational.
+- Spec: `docs/FEATURE_SPEC_V1.md` on main.
+- Implementation PR: #1, branch `feat/grokbot-p00-acp-cloudflare-spike`.
+- Keep main stable. This draft PR has NOT passed the complete V1 acceptance gates.
 
-## Follow-up after Wrangler authorization
+## Confirmed evidence
 
-- Wrangler authentication verified against the user's intended Cloudflare account (OAuth). No password/token was copied to the repo.
-- The runtime now intercepts HTTPS requests to the Cloudflare AI endpoint. A restricted WorkerEntrypoint calls the Workers AI binding; the Linux shell contains only a dummy credential.
-- The container image now runs as non-root and includes a pinned Grok custom model config using the Workers AI gateway, plus a real end-to-end ACP/tool smoke script.
-- A new GitHub Actions workflow builds the container image and typechecks the Cloudflare runtime. Both checks passed after resolving a Durable Object RPC type inference failure.
-- Added a fail-closed server-to-server runtime client, guarded provisioning API route, generation recording and a provisioning button. A physical container-start acknowledgement **does not mark ACP READY**.
-- Strengthened terminal ticket verification to reject missing/short HMAC signing secrets.
-- Local Wrangler login is confirmed. A staging deployment has NOT been verified; the attempted dry-run lost its local tool connection. Connected Cloudflare account queries show no GrokBot Worker deployment yet.
-- End-to-end Grok ACP via Cloudflare Container, durable agent sessions, interactive frontend terminal and full P0 gates are still open.
+1. Local Grok Build 1.0.50 ACP `initialize`, `session/new` and file/tool smoke passed on a scratch workspace.
+2. Workers AI `@cf/openai/gpt-oss-120b` returned a genuine structured tool call via the connected Cloudflare account.
+3. Cloudflare Worker `grokbot-sandbox-runtime-staging` was deployed, with HMAC secrets stored outside Git. Its health endpoint returned HTTP 200.
+4. A real Cloudflare container was started via the authenticated control plane and reported generation 1; a later generation 2 container reported successful start/status/exec, and `grok --version` executed successfully inside it.
+5. Local GitHub Actions Docker smoke subsequently confirmed that the built image listens as a Grok WebSocket ACP server and successfully responds to protocol initialization. This is not equivalent to a real inference/tool run on Cloudflare.
+6. GitHub Actions runtime TypeScript and session contract checks have passed at prior checkpoints. The complete Next.js application and Playwright suite are not green.
+7. The first staging ACP WebSocket smoke failed (HTTP 503 / connection failure); upstream request, Durable Object fetch and WebSocket subprotocol fixes have since been committed, but not independently verified in the live staging Worker.
 
-## Tests run
+## Implemented code awaiting full integration validation
 
-- `pnpm exec tsx --test tests/unit/agent-contracts.test.ts`: 7 passed.
-- `cd services/sandbox-runtime && pnpm check`: passed.
-- Local Wrangler runtime: `GET http://localhost:8787/health` returned `{"ok":true,"service":"grokbot-sandbox-runtime"}`.
-- Root `pnpm exec tsc --noEmit`: **31 errors remain in inherited legacy-chat code** (not claimed green). No reported errors in newly added agent files in the latest run.
-- The new files still have Biome diagnostics and require a subsequent cleanup.
+- Authenticated session create/list/detail/rename, lifecycle and generation-fenced start; Drizzle schema and additive SQL migration.
+- Cloudflare Container API 1.0 Durable Object, snapshot/restore hooks, non-root Grok daemon image, guarded HTTPS inference binding, no real Cloudflare secret in the container.
+- WebSocket ACP bridge and persistent event replay/cursor; session/new/load; permissions UI, streaming text/tools and cancellation.
+- Transactional run admission, HMAC-signed exact-prompt one-time dispatch permits, generation checks, duplicate prevention and durable run completion records with DB reconciliation.
+- xterm.js PTY/tmux terminal with generation-bound tickets and reconnection.
+- Read-only authenticated workspace file browser, path confinement, textual file preview, with traversal/symlink CI tests.
+- Docker startup wrapper that suppresses Grok startup logs to prevent exposing its ACP server token.
+- CI for Docker build, WebSocket ACP initialization, workspace isolation, TypeScript and contracts; manual GitHub Actions staging deployment workflow.
 
-## Blockers and remaining work
+## Outstanding V1 P0 gates
 
-1. Wrangler CLI is authenticated. Remaining infrastructure gate: complete validated **staging deployment**, configure service secrets securely and verify live container creation and inference; do not assume success from a dry-run.
-2. Complete P00 by executing Grok with Workers AI from **inside an actual Cloudflare container**, confirming ACP tool calls and output.
-3. Finish the authenticated Next.js-to-Worker lifecycle controller and durable operation tracking. A start route and provisional UI now exist, but it is gated behind FEATURE_AGENT_RUNTIME=1 and intentionally remains PROVISIONING until long-lived ACP is healthy.
-4. Implement run dispatch, ACP transport, durable event write-ahead log/replay, approvals, real chat UI and cancel support.
-5. Integrate actual xterm.js terminal with short-lived ticket issuance and generation fencing, file management, Git, snapshots/R2 backup verification, restore, idle policy, reconciliation and tests.
-6. Resolve legacy TypeScript errors, lint violations and run a full Next.js build plus the Playwright suite.
-7. Full security review before remotely exposing the terminal or internal Worker URLs. No V1 signoff until real E2E tests pass.
+1. **Cloudflare live ACP:** deploy the latest branch to staging, check `/internal/:id/acp-port-health`, connect signed WebSocket, run `initialize` + `session/new` + a real prompt with filesystem tool calls using Workers AI and verify output.
+2. **Frontend provision:** create Vercel project, configure private runtime URL and secrets; set up PostgreSQL migrations in a test environment. Do not enable FEATURE_AGENT_RUNTIME for production without verified integration.
+3. **Session recovery:** test cancel, browser disconnect, competing tabs, DO restart, stale generations and unknown outcomes. Ensure no duplicate prompt execution.
+4. **Files and terminal:** validate real PTY resize/input/reconnect and new file listing API on a deployed Cloudflare container.
+5. **Workspace/Git lifecycle:** finish Git operations, robust backup/restore verification (R2), idle policy/reconciliation and recovery paths.
+6. **Quality/security:** complete TypeScript and Biome cleanup, full build, E2E Playwright, migration dry-run against a disposable DB, threat model and abuse/rate limits.
+7. **Production:** only after all gates pass, promote release with controlled secrets and monitoring.
 
-**Status: work in progress; not deployed; not production-ready.**
+## Deployment constraints and operator needs
+
+- Cloudflare Wrangler was authorized on the user's Linux; however the Predator connector session later terminated.
+- Existing staging Worker remains deployed, but the newest source changes are **not yet confirmed deployed**.
+- To avoid requiring the user's Linux for each deployment, `.github/workflows/deploy-sandbox-staging.yml` was added. It runs manually on the feature branch in the GitHub `staging` environment. Configure the environment secret `CLOUDFLARE_API_TOKEN` (least-privilege Worker/Containers deployment token) and variable `CLOUDFLARE_ACCOUNT_ID` directly in GitHub settings. Never send credentials in chat or commit them.
+- The existing Cloudflare service and terminal signing secrets remain outside Git and are not echoed by any command.
+- The legacy chatbot had 31 TypeScript errors before this phase, concentrated in old SDK/JSON typing; a focused correction to `lib/utils.ts` was started but the full build gate is open.
+- No Vercel GrokBot project was found in the connected account during last inspection.
+- There has been no merge into main and no application production deployment.
+
+**Current status: partial implementation with proven local Docker ACP, staging runtime deployed at an earlier revision, but no end-to-end Grok-on-Workers-AI chat acceptance yet.**
