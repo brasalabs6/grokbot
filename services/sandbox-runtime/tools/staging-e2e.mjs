@@ -131,15 +131,15 @@ async function connectAcp(generation) {
   return {ws,rpc,seen,protocolReady};
 }
 
-let started = false;
+let startAttempted = false;
 let cleanupError = false;
 try {
   const before=await internal("GET","status");
   if(before.running)throw new Error("FRESH_SANDBOX_UNEXPECTEDLY_RUNNING");
+  startAttempted = true;
   const startedResult=await internal("POST","start",{operationId:randomUUID()},100_000);
   if(!startedResult.running || !Number.isSafeInteger(startedResult.generation))
     throw new Error("SANDBOX_START_NOT_CONFIRMED");
-  started=true;
   const generation=startedResult.generation;
   const status=await internal("GET","status");
   if(!status.running || status.generation!==generation)
@@ -185,7 +185,7 @@ try {
     ws.close();
   }
 } finally {
-  if(started) {
+  if(startAttempted) {
     try {
       const stopped=await internal("POST","stop",{
         operationId:randomUUID(),checkpoint:false
