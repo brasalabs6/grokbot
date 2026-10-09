@@ -17,6 +17,7 @@ export async function verifyTerminalTicket(
   value: string,
   key: string
 ): Promise<TerminalTicket | null> {
+  if (!key || key.length < 32) return null;
   const [encoded, signature, ...extra] = value.split(".");
   if (!encoded || !signature || extra.length) {
     return null;
