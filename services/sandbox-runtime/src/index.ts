@@ -169,6 +169,97 @@ export class SessionSandbox extends DurableObject<Env> {
     }
   }
 
+  /** Capture ACP notifications before forwarding them to the browser. */
+  private async recordAcpOutput(text: string) {
+    if (text.length > 128_000) return;
+    let message: Record<string, unknown>;
+    try { message = JSON.parse(text); } catch { return; }
+    if (!message || typeof message !== "object") return;
+    if (message.method === "session/update") {
+      await this.ctx.storage.transaction(async tx => {
+        const seq = (await tx.get<number>("acp:seq") ?? 0) + 1;
+        await tx.put("acp:seq", seq);
+        await tx.put("acp:event:" + seq.toString().padStart(12,"0"),{
+          seq,
+          at:new Date().toISOString(),
+          message
+        });
+      });
+    } else if (message.result && typeof message.result === "object" &&
+      !Array.isArray(message.result) &&
+      typeof (message.result as Record<string,unknown>).sessionId === "string") {
+      const sessionId=(message.result as Record<string,unknown>).sessionId as string;
+      if(sessionId.length < 256)await this.ctx.storage.put("acpSessionId",sessionId);
+    }
+  }
+  async acpEvents(after: number) {
+    if(!Number.isSafeInteger(after)||after<0)return {events:[],cursor:0};
+    const items=await this.ctx.storage.list<{
+      seq:number;at:string;message:Record<string,unknown>;
+    }>({prefix:"acp:event:"});
+    const events=[...items.values()].filter(x=>x.seq>after).sort((a,b)=>a.seq-b.seq).slice(0,300);
+    return {events,cursor:events.at(-1)?.seq??after};
+  }
+  async attachAcp(request: Request,ticket:AcpTicket):Promise<Response> {
+    const container=this.container();
+    const generation=await this.ctx.storage.get<number>("generation");
+    if (!container.running||generation!==ticket.generation) {
+      return error("GENERATION_CONFLICT",409);
+    }
+    const consumed=await this.ctx.storage.transaction(async tx=>{
+      const key="ticket:"+ticket.jti;
+      if((await tx.get<number>(key))!==undefined)return false;
+      await tx.put(key,ticket.exp);
+      return true;
+    });
+    if(!consumed)return error("TICKET_REPLAY",401);
+    if((await this.ctx.storage.getAlarm())===null){
+      await this.ctx.storage.setAlarm(Date.now()+180_000);
+    }
+    const secret=await this.ctx.storage.get<string>("grokAgentSecret");
+    if(!secret)return error("ACP_SERVER_NOT_CONFIGURED",503);
+    let upstream:Response;
+    try {
+      upstream=await container.getTcpPort(2419).fetch(
+        new Request("http://container/ws?server-key="+encodeURIComponent(secret),{
+          headers:{"Upgrade":"websocket"},
+        })
+      );
+    }catch{return error("ACP_SERVER_UNREACHABLE",503);}
+    if(upstream.status!==101||!upstream.webSocket) {
+      return error("ACP_SERVER_NOT_READY",503);
+    }
+    const backend=upstream.webSocket;
+    backend.accept();
+    const pair=new WebSocketPair();
+    const browser=pair[0];
+    const bridge=pair[1];
+    bridge.accept();
+    // Maintain socket-local processing order for durable event ordering.
+    let delivery=Promise.resolve();
+    backend.addEventListener("message",event=>{
+      delivery=delivery.then(async()=>{
+        if(typeof event.data==="string")await this.recordAcpOutput(event.data);
+        if(bridge.readyState===WebSocket.OPEN)bridge.send(event.data);
+      }).catch(()=>{
+        try{bridge.close(1011,"ACP event recording failed");}catch{}
+      });
+    });
+    bridge.addEventListener("message",event=>{
+      if(typeof event.data!=="string"||event.data.length>1_000_000) {
+        bridge.close(1009,"Message too large or invalid");return;
+      }
+      if(backend.readyState===WebSocket.OPEN)backend.send(event.data);
+    });
+    const close=(code:number)=>()=>{
+      try{backend.close(code,"Peer disconnected");}catch{}
+      try{bridge.close(code,"Peer disconnected");}catch{}
+    };
+    backend.addEventListener("close",close(1000));
+    bridge.addEventListener("close",close(1000));
+    return new Response(null,{status:101,webSocket:browser});
+  }
+
   async attachTerminal(request: Request, ticket: TerminalTicket) {
     const container = this.container();
     const generation = await this.ctx.storage.get<number>("generation");
@@ -273,6 +364,20 @@ export default {
       return Response.json({ ok: true, service: "grokbot-sandbox-runtime" });
     }
     const parts = url.pathname.split("/").filter(Boolean);
+    if(parts[0]==="ws"&&parts[1]==="acp"&&parts.length===3){
+      if(request.headers.get("Upgrade")?.toLowerCase()!=="websocket")
+        return error("WEBSOCKET_REQUIRED",426);
+      if(env.APP_ORIGIN&&request.headers.get("Origin")!==env.APP_ORIGIN)
+        return error("INVALID_ORIGIN",403);
+      const protocols=request.headers.get("Sec-WebSocket-Protocol")
+        ?.split(",").map(value=>value.trim())??[];
+      const token=protocols.find(value=>value.startsWith("grokbot-acp."))
+        ?.slice("grokbot-acp.".length);
+      const ticket=token?await verifyAcpTicket(token,env.RUNTIME_TICKET_SECRET):null;
+      if(!ticket||ticket.sessionId!==parts[2])
+        return error("INVALID_ACP_TICKET",401);
+      return env.SANDBOXES.getByName("grokbot-"+ticket.sessionId).attachAcp(request,ticket);
+    }
     if (parts[0] === "ws" && parts[1] === "terminal" && parts.length === 3) {
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
         return error("WEBSOCKET_REQUIRED", 426);
@@ -306,6 +411,11 @@ export default {
     }
     const sandbox = env.SANDBOXES.getByName(`grokbot-${parts[1]}`);
     try {
+      if(parts[2]==="acp-events"&&request.method==="GET"){
+        const raw=url.searchParams.get("after")??"0";
+        if(!/^(0|[1-9]\d{0,9})$/.test(raw))return error("INVALID_CURSOR",400);
+        return Response.json(await sandbox.acpEvents(Number(raw)));
+      }
       if (parts[2] === "status" && request.method === "GET") {
         return Response.json(await sandbox.status());
       }
