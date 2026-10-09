@@ -23,7 +23,7 @@ export async function verifyAcpTicket(raw: string, secret: string): Promise<AcpT
     const key = await crypto.subtle.importKey(
       "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
     );
-    if (!(await crypto.subtle.verify("HMAC", key, decode(parts[1]), encoder.encode(parts[0])))) {
+    if (!(await crypto.subtle.verify("HMAC", key, decode(parts[1]) as BufferSource, encoder.encode(parts[0])))) {
       return null;
     }
     const value: unknown = JSON.parse(new TextDecoder().decode(decode(parts[0])));
