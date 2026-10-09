@@ -379,3 +379,30 @@ export async function listAgentEvents(
     .orderBy(agentEvent.seq)
     .limit(Math.max(1, Math.min(limit, 500)));
 }
+
+/** Record physical container generation; this does NOT mark ACP as READY. */
+export async function recordProvisionedSandbox(args:{
+  sessionId:string;ownerId:string;expectedVersion:number;generation:number;
+}){
+  if(!Number.isSafeInteger(args.generation)||args.generation<1)
+    throw new AgentConflict("GENERATION_CONFLICT");
+  return db.transaction(async tx=>{
+    const [existing]=await tx.select().from(agentSession).where(
+      and(eq(agentSession.id,args.sessionId),eq(agentSession.ownerId,args.ownerId),
+          isNull(agentSession.deletedAt))
+    ).for("update");
+    if(!existing)return null;
+    if(existing.state!=="PROVISIONING"||existing.stateVersion!==args.expectedVersion)
+      throw new AgentConflict("VERSION_CONFLICT");
+    if(args.generation<existing.generation)
+      throw new AgentConflict("GENERATION_CONFLICT");
+    await tx.update(agentSandbox).set({
+      state:"STARTING",generation:args.generation,lastError:null
+    }).where(eq(agentSandbox.sessionId,args.sessionId));
+    const [session]=await tx.update(agentSession).set({
+      generation:args.generation,stateVersion:existing.stateVersion+1,
+      updatedAt:new Date()
+    }).where(eq(agentSession.id,args.sessionId)).returning();
+    return session;
+  });
+}
