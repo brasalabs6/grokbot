@@ -188,6 +188,13 @@ export class SessionSandbox extends DurableObject<Env> {
         await this.ctx.storage.put("snapshotId", snapshotId);
       }
       await container.destroy("Operator stopped sandbox");
+      // ACP transport passwords rotate on each restart.
+      await this.ctx.storage.delete("grokAgentSecret");
+      if (!checkpoint) {
+        await this.ctx.storage.delete("snapshotId");
+        await this.ctx.storage.delete("acpSessionId");
+        await this.ctx.storage.delete("acpHealthyGeneration");
+      }
       await this.ctx.storage.put("lastStop", operationId);
       return { running: false, snapshotId };
     });
