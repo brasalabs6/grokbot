@@ -46,3 +46,5 @@ jobs:
           echo 'Agent modules have no TypeScript errors.'
           echo 'Legacy root typecheck errors (not waived for release):'
           grep -c 'error TS' /tmp/grokbot-ts.log || true
+          echo '--- TypeScript diagnostics (baseline and new) ---'
+          grep -E 'error TS[0-9]+' /tmp/grokbot-ts.log | head -100 || true
