@@ -78,13 +78,13 @@ export class SessionSandbox extends DurableObject<Env> {
       const snapshotId = await this.ctx.storage.get<string>("snapshotId");
       container.start(
         snapshotId
-          ? { containerSnapshot: { id: snapshotId }, instance:"basic", enableInternet: false,
+          ? { containerSnapshot: { id: snapshotId }, instance:"standard-1", enableInternet: false,
               env: {GROK_AGENT_SECRET: agentSecret}
             }
           : {
               enableInternet: false,
               image: container.images.grok,
-              instance: "basic",
+              instance: "standard-1",
               env: {
                 NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
                 GROK_AGENT_SECRET:agentSecret
