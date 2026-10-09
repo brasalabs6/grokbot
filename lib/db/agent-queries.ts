@@ -15,6 +15,7 @@ import {
 } from "@/lib/agent/lifecycle";
 import {
   agentEvent,
+  agentOperation,
   agentRun,
   agentSandbox,
   agentSession,
@@ -405,4 +406,54 @@ export async function recordProvisionedSandbox(args:{
     }).where(eq(agentSession.id,args.sessionId)).returning();
     return session;
   });
+}
+
+/**
+ * Transactional/idempotent START intent. Only the winner may dispatch
+ * to Cloudflare. Later duplicate requests observe the same operation.
+ */
+export async function claimStartOperation(args:{
+  sessionId:string;ownerId:string;operationId:string;expectedVersion:number;
+}){
+  return db.transaction(async tx=>{
+    const [session]=await tx.select().from(agentSession).where(and(
+      eq(agentSession.id,args.sessionId),eq(agentSession.ownerId,args.ownerId),
+      isNull(agentSession.deletedAt)
+    )).for("update");
+    if(!session)return null;
+    const [existing]=await tx.select().from(agentOperation).where(and(
+      eq(agentOperation.sessionId,args.sessionId),
+      eq(agentOperation.kind,"START"),
+      eq(agentOperation.idempotencyKey,args.operationId)
+    )).limit(1);
+    if(existing)return {session,operation:existing,claimed:false};
+    if(session.stateVersion!==args.expectedVersion)throw new AgentConflict("VERSION_CONFLICT");
+    if(session.state!=="CREATED")throw new AgentConflict("SESSION_NOT_READY");
+    const [operation]=await tx.insert(agentOperation).values({
+      id:args.operationId,sessionId:session.id,idempotencyKey:args.operationId,
+      kind:"START",state:"PENDING",expectedVersion:session.stateVersion,
+      generation:session.generation
+    }).returning();
+    const [updated]=await tx.update(agentSession).set({
+      state:"PROVISIONING",stateVersion:session.stateVersion+1,
+      updatedAt:new Date()
+    }).where(eq(agentSession.id,session.id)).returning();
+    return {session:updated,operation,claimed:true};
+  });
+}
+
+/** Only update the operation created by this session. */
+export async function recordStartOperationStatus(args:{
+  operationId:string;sessionId:string;
+  status:"EXECUTING"|"FAILED"|"OUTCOME_UNKNOWN";
+}){
+  const [updated]=await db.update(agentOperation).set({
+    state:args.status,
+    ...(args.status==="FAILED"?{finishedAt:new Date()}: {})
+  }).where(and(
+    eq(agentOperation.id,args.operationId),
+    eq(agentOperation.sessionId,args.sessionId),
+    eq(agentOperation.kind,"START")
+  )).returning();
+  return updated??null;
 }
