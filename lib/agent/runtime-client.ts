@@ -1,9 +1,9 @@
 import "server-only";
 
 /** Fail-closed server-to-server client for the Cloudflare Sandbox control plane. */
-const ACTIONS = ["status","start","stop","acp-smoke"] as const;
+const ACTIONS = ["status","start","stop","acp-smoke","acp-events"] as const;
 export type RuntimeAction = typeof ACTIONS[number];
-export type RuntimeStatus = {running:boolean;generation:number;snapshotId?:string|null};
+export type RuntimeStatus = {running:boolean;generation:number;acpSessionId?:string|null;snapshotId?:string|null};
 export type RuntimeStartResult = {running:boolean;generation:number;idempotent:boolean};
 export type RuntimeStopResult = {running:boolean;snapshotId?:string|null;idempotent?:boolean};
 
@@ -39,11 +39,16 @@ export async function callRuntime<T>(
     throw new RuntimeApiError("INVALID_SESSION_ID",400);
   if(!ACTIONS.includes(action))throw new RuntimeApiError("INVALID_ACTION",400);
   const {baseURL,secret}=runtimeConfiguration();
-  const method=action==="status"?"GET":"POST";
+  const method=(action==="status"||action==="acp-events")?"GET":"POST";
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),60_000);
   try{
-    const response=await requestFetch(baseURL+"/internal/"+sessionId+"/"+action,{
+    const after=body?.after;
+    if(action==="acp-events"&&(!Number.isSafeInteger(after)||Number(after)<0))
+      throw new RuntimeApiError("INVALID_CURSOR",400);
+    const path=baseURL+"/internal/"+sessionId+"/"+action+
+      (action==="acp-events"?"?after="+String(after):"");
+    const response=await requestFetch(path,{
       method,headers:{
         Authorization:"Bearer "+secret,
         ...(method==="POST"?{"Content-Type":"application/json"}:{})
@@ -69,3 +74,8 @@ export const stopRuntime=(sessionId:string,operationId:string,checkpoint:boolean
   callRuntime<RuntimeStopResult>(sessionId,"stop",{operationId,checkpoint});
 export const probeAcp=(sessionId:string)=>
   callRuntime<{ok:boolean;error?:string;updateTypes?:string[]}>(sessionId,"acp-smoke",{confirm:true});
+
+export const getRuntimeAcpEvents=(sessionId:string,after:number)=>
+  callRuntime<{events:{seq:number;at:string;message:Record<string,unknown>}[];cursor:number}>(
+    sessionId,"acp-events",{after}
+  );
