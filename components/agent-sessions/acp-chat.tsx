@@ -288,10 +288,14 @@ export function AcpChat({ sessionId, active }: { sessionId: string; active: bool
       await rpc("grokbot/dispatch",{
         sessionId:session.current,prompt:parts,permit:reservation.permit
       });
-      // Reconcile via trusted Cloudflare control-plane evidence.
-      void fetch("/api/agent-sessions/"+sessionId+"/runs/"+
+      // Wait for the authoritative run result before enabling another prompt.
+      const settled=await fetch("/api/agent-sessions/"+sessionId+"/runs/"+
         reservation.runId+"/reconcile",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:"{}"}).catch(()=>{});
+        body:"{}"});
+      if(!settled.ok) {
+        const body=await settled.json() as {error?:{code?:string}};
+        throw new Error(body.error?.code??"RUN_RECONCILIATION_PENDING");
+      }
     }catch(err) {
       setError((err instanceof Error?err.message:"PROMPT_FAILED")+
         (accepted?" — outcome may be unknown; check activity before retrying.":""));
