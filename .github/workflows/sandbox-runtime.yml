@@ -67,8 +67,6 @@ jobs:
             sleep 1
           done
           node services/sandbox-runtime/tools/local-server-smoke.mjs
-      - name: Verify sandbox workspace confinement
-        run: |
           node --check services/sandbox-runtime/tools/workspace.mjs
           docker exec grokbot-acp-test sh -c 'printf test-content > /workspace/ci-file.txt'
           docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs list . | grep 'ci-file.txt'
