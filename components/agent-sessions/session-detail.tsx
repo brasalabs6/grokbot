@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { AcpChat } from "./acp-chat";
 
 type Panel = "chat" | "terminal" | "files" | "activity";
 export function SessionDetail({
@@ -115,23 +116,26 @@ export function SessionDetail({
           Session {id} · {modelId} · Generation {generation}
         </p>
         {panel === "chat" && (
-          <div className="grid flex-1 place-content-center text-center">
-            <h2 className="font-semibold">Agent not connected</h2>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              State: {currentState}. Sending prompts is disabled until
-              Cloudflare provisioning and the ACP handshake are verified. The
-              legacy chatbot remains available separately.
-            </p>
-            {currentState==="CREATED" && (
-              <Button className="mx-auto mt-4" disabled={startBusy}
-                onClick={()=>void startContainer()}>
-                {startBusy?"Requesting sandbox…":"Provision Cloudflare sandbox"}
-              </Button>
+          <>
+            {currentState === "CREATED" && (
+              <div className="grid flex-1 place-content-center text-center">
+                <h2 className="font-semibold">Start your Grok workspace</h2>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  The Cloudflare sandbox is provisioned on demand. The agent connects
+                  over a signed, short-lived ACP WebSocket capability.
+                </p>
+                <Button className="mx-auto mt-4" disabled={startBusy}
+                  onClick={()=>void startContainer()}>
+                  {startBusy?"Requesting sandbox…":"Provision Cloudflare sandbox"}
+                </Button>
+                {startError && <p role="alert" className="mt-3 text-sm text-red-500">
+                  {startError}
+                </p>}
+              </div>
             )}
-            {startError&&<p role="alert" className="mt-3 text-sm text-red-500">
-              {startError}
-            </p>}
-          </div>
+            <AcpChat sessionId={id}
+              active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
+          </>
         )}
         {panel === "terminal" && (
           <div className="grid flex-1 place-content-center text-center">
