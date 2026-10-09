@@ -242,6 +242,22 @@ export class SessionSandbox extends DurableObject<Env> {
       }
     }
   }
+  /** Health probe that does not expose the daemon secret or ACP conversation. */
+  async acpPortHealth() {
+    const container=this.container();
+    if(!container.running)return {ready:false,reason:"CONTAINER_STOPPED"};
+    try {
+      const result=await container.getTcpPort(2419).fetch("http://container/ws",{
+        method:"GET",signal:AbortSignal.timeout(4000)
+      });
+      await result.body?.cancel();
+      // Grok returns 400/401/426 to a GET without WebSocket Upgrade.
+      return {ready:result.status<500,status:result.status};
+    }catch(error){
+      console.error("ACP_PORT_HEALTH",error instanceof Error?error.name:"UnknownError");
+      return {ready:false,reason:"PORT_UNREACHABLE"};
+    }
+  }
   async acpEvents(after: number) {
     if(!Number.isSafeInteger(after)||after<0)return {events:[],cursor:0};
     const items=await this.ctx.storage.list<{
@@ -272,6 +288,7 @@ export class SessionSandbox extends DurableObject<Env> {
     const secret=await this.ctx.storage.get<string>("grokAgentSecret");
     if(!secret)return error("ACP_SERVER_NOT_CONFIGURED",503);
     let upstream:Response;
+    let phase="REQUEST_CONSTRUCTION";
     try {
       // Forward the original upgrade handshake, including its WebSocket key
       // and version. A synthesized Request with only "Upgrade" is insufficient.
@@ -287,8 +304,12 @@ export class SessionSandbox extends DurableObject<Env> {
       forwarded.headers.delete("origin");
       // Do not disclose the browser's one-time ticket to the Grok process.
       forwarded.headers.delete("sec-websocket-protocol");
+      phase="CONTAINER_PORT_FETCH";
       upstream=await container.getTcpPort(2419).fetch(forwarded);
-    }catch{return error("ACP_SERVER_UNREACHABLE",503);}
+    }catch(e){
+      console.error("ACP_UPSTREAM",phase,e instanceof Error?e.name:"UnknownError");
+      return error("ACP_SERVER_UNREACHABLE",503);
+    }
     if(upstream.status!==101||!upstream.webSocket) {
       return error("ACP_SERVER_NOT_READY",503);
     }
@@ -341,7 +362,12 @@ export class SessionSandbox extends DurableObject<Env> {
     };
     backend.addEventListener("close",close(1000));
     bridge.addEventListener("close",close(1000));
-    return new Response(null,{status:101,webSocket:browser});
+    const selected=request.headers.get("Sec-WebSocket-Protocol")
+      ?.split(",").map(x=>x.trim())
+      .find(x=>x.startsWith("grokbot-acp."))??"";
+    return new Response(null,{status:101,webSocket:browser,
+      headers:{"Sec-WebSocket-Protocol":selected}});
+
   }
 
   async attachTerminal(request: Request, ticket: TerminalTicket) {
@@ -437,7 +463,11 @@ export class SessionSandbox extends DurableObject<Env> {
         server.close(1011, "Terminal failed");
       } catch {}
     });
-    return new Response(null, { status: 101, webSocket: client });
+    const selected=request.headers.get("Sec-WebSocket-Protocol")
+      ?.split(",").map(x=>x.trim())
+      .find(x=>x.startsWith("grokbot-ticket."))??"";
+    return new Response(null, { status: 101, webSocket: client,
+      headers:{"Sec-WebSocket-Protocol":selected} });
   }
 }
 
@@ -495,6 +525,9 @@ export default {
     }
     const sandbox = env.SANDBOXES.getByName(`grokbot-${parts[1]}`);
     try {
+      if(parts[2]==="acp-port-health"&&request.method==="GET"){
+        return Response.json(await sandbox.acpPortHealth());
+      }
       if(parts[2]==="acp-events"&&request.method==="GET"){
         const raw=url.searchParams.get("after")??"0";
         if(!/^(0|[1-9]\d{0,9})$/.test(raw))return error("INVALID_CURSOR",400);
