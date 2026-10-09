@@ -52,6 +52,8 @@ jobs:
         run: docker build --tag grokbot-acp-test --progress=plain -f services/sandbox-runtime/Dockerfile services/sandbox-runtime
       - name: Check ACP probe syntax
         run: node --check services/sandbox-runtime/tools/acp-smoke.mjs
+      - name: Check remote staging E2E syntax
+        run: node --check services/sandbox-runtime/tools/staging-e2e.mjs
       - name: Check actual Grok ACP daemon in Docker
         env:
           GROK_AGENT_SECRET: integration-smoke-test-token
