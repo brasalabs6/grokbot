@@ -48,4 +48,4 @@ WORKDIR /workspace
 # Each container serves ACP locally. The token is randomly generated per
 # Durable Object and passed through container.start(). No public port binding.
 EXPOSE 2419
-CMD ["sh","-c","test -n \"$GROK_AGENT_SECRET\" && exec grok agent --no-leader --model cf-gpt-oss serve --bind 0.0.0.0:2419 --secret \"$GROK_AGENT_SECRET\""]
+CMD ["sh","-c","test -n \"$GROK_AGENT_SECRET\" && exec grok agent --no-leader --model cf-gpt-oss serve --bind 0.0.0.0:2419"]
