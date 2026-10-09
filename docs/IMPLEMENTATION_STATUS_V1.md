@@ -29,6 +29,16 @@ Last updated: 2026-10-09. **Work in progress; no production release.**
 - Docker startup wrapper that suppresses Grok startup logs to prevent exposing its ACP server token.
 - CI for Docker build, WebSocket ACP initialization, workspace isolation, TypeScript and contracts; manual GitHub Actions staging deployment workflow.
 
+## Verified staging deployment through GitHub Actions (2026-10-09)
+
+- The operator configured the protected GitHub `staging` environment with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- GitHub Actions run [37995647338](https://github.com/brasalabs6/grokbot/actions/runs/37995647338) completed successfully for commit `6592e51d747925b0b9baec76e962218f26a8461b`.
+- The runner verified credentials, installed dependencies, passed the runtime typecheck, built/uploaded the container image, deployed Worker `grokbot-sandbox-runtime-staging` and received an HTTP 200 from `/health`.
+- The Cloudflare API independently confirmed the Worker modification at `2026-10-09T21:50:14Z`. Deployed Worker version: `65840eba-20d8-49a5-8683-6ce8f96dd09f`.
+- All deployment occurred through GitHub Actions without Predator. **This confirms health/deploy only; it is not an ACP tool E2E pass.**
+- A separate opt-in `.github/workflows/staging-e2e.yml` and `services/sandbox-runtime/tools/staging-e2e.mjs` were added. They create a disposable sandbox, verify PTY/tmux reconnect, ACP `initialize` and `session/new`, Workers AI tool execution and actual workspace file creation, and clean up after the test.
+- Before triggering this live smoke, configure the matching `CONTROL_PLANE_SERVICE_SECRET` and `RUNTIME_TICKET_SECRET` as additional protected secrets in the GitHub staging environment. Their existing values were previously stored only in the operator's Linux `~/.config/grokbot/staging-runtime-secrets.env`. Never paste either secret into chat or Git.
+
 ## Outstanding V1 P0 gates
 
 1. **Cloudflare live ACP:** deploy the latest branch to staging, check `/internal/:id/acp-port-health`, connect signed WebSocket, run `initialize` + `session/new` + a real prompt with filesystem tool calls using Workers AI and verify output.
@@ -41,12 +51,12 @@ Last updated: 2026-10-09. **Work in progress; no production release.**
 
 ## Deployment constraints and operator needs
 
-- Cloudflare Wrangler was authorized on the user's Linux; however the Predator connector session later terminated.
-- Existing staging Worker remains deployed, but the newest source changes are **not yet confirmed deployed**.
+- Cloudflare Wrangler was authorized on the user's Linux; the Predator connector session later terminated. GitHub Actions deployment now works independently.
+- Staging Worker was updated successfully to commit `6592e51`. Later test-workflow-only commits are not redeployed until the next authorized staging run.
 - To avoid requiring the user's Linux for each deployment, `.github/workflows/deploy-sandbox-staging.yml` was added. It runs manually on the feature branch in the GitHub `staging` environment. Configure the environment secret `CLOUDFLARE_API_TOKEN` (least-privilege Worker/Containers deployment token) and variable `CLOUDFLARE_ACCOUNT_ID` directly in GitHub settings. Never send credentials in chat or commit them.
 - The existing Cloudflare service and terminal signing secrets remain outside Git and are not echoed by any command.
 - The legacy chatbot had 31 TypeScript errors before this phase, concentrated in old SDK/JSON typing; a focused correction to `lib/utils.ts` was started but the full build gate is open.
 - No Vercel GrokBot project was found in the connected account during last inspection.
 - There has been no merge into main and no application production deployment.
 
-**Current status: partial implementation with proven local Docker ACP, staging runtime deployed at an earlier revision, but no end-to-end Grok-on-Workers-AI chat acceptance yet.**
+**Current status: successful GitHub Actions Cloudflare staging deploy and local Docker ACP acceptance; live Grok-on-Workers-AI and terminal/recovery E2E still pending.**
