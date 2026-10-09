@@ -7,8 +7,7 @@ const token = process.env.GROK_AGENT_SECRET;
 if (!token || token.length < 12) throw new Error("GROK_AGENT_SECRET must be set for smoke");
 const url = new URL("ws://127.0.0.1:2419/ws");
 url.searchParams.set("server-key", token);
-const timeout = AbortSignal.timeout(25000);
-const ws = new WebSocket(url, { signal: timeout });
+const ws = new WebSocket(url);
 let gotInitialize = false;
 const finished = new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error("Timed out awaiting ACP response")), 24000);
