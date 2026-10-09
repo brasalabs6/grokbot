@@ -483,3 +483,50 @@ export async function confirmAgentReady(args:{
     return updated;
   });
 }
+
+/** Reconcile only a generation-matched terminal result observed by the trusted DO. */
+export async function reconcileCompletedAgentRun(args:{
+  sessionId:string;ownerId:string;runId:string;generation:number;
+  status:"SUCCEEDED"|"FAILED"|"CANCELLED";endedAt:number;
+}){
+  if(!Number.isSafeInteger(args.endedAt)||args.endedAt<0||
+     args.endedAt>Date.now()+60_000)throw new AgentConflict("VERSION_CONFLICT");
+  return db.transaction(async tx=>{
+    const [session]=await tx.select().from(agentSession).where(and(
+      eq(agentSession.id,args.sessionId),eq(agentSession.ownerId,args.ownerId),
+      isNull(agentSession.deletedAt)
+    )).for("update");
+    if(!session)return null;
+    const [run]=await tx.select().from(agentRun).where(and(
+      eq(agentRun.id,args.runId),eq(agentRun.sessionId,args.sessionId)
+    )).for("update");
+    if(!run)return null;
+    if(session.generation!==args.generation||run.generation!==args.generation)
+      throw new AgentConflict("GENERATION_CONFLICT");
+    if(run.state==="SUCCEEDED"||run.state==="FAILED"||run.state==="CANCELLED"){
+      if(run.state!==args.status)throw new AgentConflict("VERSION_CONFLICT");
+      return {session,run,idempotent:true};
+    }
+    if(session.currentRunId!==run.id)
+      throw new AgentConflict("VERSION_CONFLICT");
+    const [updatedRun]=await tx.update(agentRun).set({
+      state:args.status,endedAt:new Date(args.endedAt),
+      finishReason:args.status==="SUCCEEDED"?"completed":"remote_"+args.status.toLowerCase()
+    }).where(eq(agentRun.id,run.id)).returning();
+    const [updatedSession]=await tx.update(agentSession).set({
+      state:args.status==="SUCCEEDED"?"IDLE":"DEGRADED",
+      currentRunId:null,stateVersion:session.stateVersion+1,
+      updatedAt:new Date()
+    }).where(eq(agentSession.id,session.id)).returning();
+    const [head]=await tx.select({
+      seq:sql<number>`coalesce(max(${agentEvent.seq}),0)`
+    }).from(agentEvent).where(eq(agentEvent.sessionId,session.id));
+    await tx.insert(agentEvent).values({
+      id:crypto.randomUUID(),sessionId:session.id,runId:run.id,
+      generation:args.generation,seq:Number(head?.seq??0)+1,
+      type:"run.finished",payload:{status:args.status,source:"cloudflare-grok-acp"},
+      payloadVersion:1
+    });
+    return {session:updatedSession,run:updatedRun,idempotent:false};
+  });
+}
