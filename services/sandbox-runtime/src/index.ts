@@ -43,6 +43,7 @@ export class SessionSandbox extends DurableObject<Env> {
       generation: (await this.ctx.storage.get<number>("generation")) ?? 0,
       running: container.running,
       acpSessionId: (await this.ctx.storage.get<string>("acpSessionId")) ?? null,
+      acpHealthyGeneration: (await this.ctx.storage.get<number>("acpHealthyGeneration")) ?? 0,
       snapshotId: (await this.ctx.storage.get<string>("snapshotId")) ?? null,
     };
   }
@@ -189,7 +190,11 @@ export class SessionSandbox extends DurableObject<Env> {
       !Array.isArray(message.result) &&
       typeof (message.result as Record<string,unknown>).sessionId === "string") {
       const sessionId=(message.result as Record<string,unknown>).sessionId as string;
-      if(sessionId.length < 256)await this.ctx.storage.put("acpSessionId",sessionId);
+      if(sessionId.length < 256) {
+        await this.ctx.storage.put("acpSessionId",sessionId);
+        await this.ctx.storage.put("acpHealthyGeneration",
+          await this.ctx.storage.get<number>("generation")??0);
+      }
     }
   }
   async acpEvents(after: number) {
