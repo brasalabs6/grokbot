@@ -34,6 +34,7 @@ RUN printf '%s\n' \
     && chown node:node /home/node/.grok/config.toml \
     && chmod 0600 /home/node/.grok/config.toml
 
+COPY --chown=node:node tools/acp-smoke.mjs /opt/grokbot/acp-smoke.mjs
 ENV HOME=/home/node
 ENV NODE_EXTRA_CA_CERTS=/etc/cloudflare/certs/cloudflare-containers-ca.crt
 USER node
