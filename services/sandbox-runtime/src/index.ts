@@ -147,22 +147,42 @@ export class SessionSandbox extends DurableObject<Env> {
       return { running: false, snapshotId };
     });
   }
+  /** Prune consumed one-time tickets without retaining unbounded storage keys. */
+  async alarm() {
+    const tickets = await this.ctx.storage.list<number>({ prefix: "ticket:" });
+    const now = Date.now();
+    for (const [key, expires] of tickets) {
+      if (expires < now) await this.ctx.storage.delete(key);
+    }
+    if ([...tickets.values()].some(value => value >= now)) {
+      await this.ctx.storage.setAlarm(now + 180_000);
+    }
+  }
+
   async attachTerminal(request: Request, ticket: TerminalTicket) {
     const container = this.container();
     const generation = await this.ctx.storage.get<number>("generation");
     if (!container.running || generation !== ticket.generation) {
       return error("GENERATION_CONFLICT", 409);
     }
-    // The ticket is consumed before spawning any process, so a replay cannot open a second shell.
-    const used = await this.ctx.storage.get<boolean>(`ticket:${ticket.jti}`);
-    if (used) {
-      return error("TICKET_REPLAY", 401);
-    }
-    await this.ctx.storage.put(`ticket:${ticket.jti}`, true);
     const url = new URL(request.url);
-    const terminal = url.searchParams.get("session") || "main";
-    if (!terminalName.test(terminal)) {
+    // The terminal identity is bound to the signed ticket, not client input.
+    const terminal = ticket.terminalId;
+    if ((url.searchParams.has("session") &&
+         url.searchParams.get("session") !== terminal) ||
+         !terminalName.test(terminal)) {
       return error("INVALID_TERMINAL", 400);
+    }
+    // Atomic compare-and-consume prevents concurrent use of a one-time ticket.
+    const firstUse = await this.ctx.storage.transaction(async (tx) => {
+      const used = await tx.get<number>("ticket:" + ticket.jti);
+      if (used !== undefined) return false;
+      await tx.put("ticket:" + ticket.jti, ticket.exp);
+      return true;
+    });
+    if (!firstUse) return error("TICKET_REPLAY", 401);
+    if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now() + 180_000);
     }
     const abort = new AbortController();
     const proc = await container.exec(
