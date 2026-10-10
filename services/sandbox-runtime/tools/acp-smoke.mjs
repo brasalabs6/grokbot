@@ -13,7 +13,7 @@ import { join } from "node:path";
 const timeoutMs = 140_000;
 const work = await mkdtemp(join(tmpdir(), "grokbot-acp-"));
 const agent = spawn("grok", [
-  "--no-auto-update", "agent", "--no-leader", "--model", "cf-gpt-oss", "--always-approve", "stdio"
+  "--no-auto-update", "agent", "--no-leader", "--model", "cf-qwen3.8-27b", "--always-approve", "stdio"
 ], { cwd: work, stdio: ["pipe", "pipe", "pipe"] });
 
 let seq=0;
