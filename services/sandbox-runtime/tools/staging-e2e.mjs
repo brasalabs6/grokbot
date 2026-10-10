@@ -205,6 +205,18 @@ try {
   console.log("STAGING_CONTAINER_STARTED generation="+generation);
 
   await checkTerminal(generation);
+  // Probe the loopback TCP port from inside the container independently of
+  // the Cloudflare port-forwarding API. Never print secret values.
+  const probe=await internal("POST","exec",{argv:["node","-e",
+    "const n=require('node:net');const c=n.connect({port:2419,host:'127.0.0.1'});c.setTimeout(2500);c.on('connect',()=>{console.log('LISTENING');c.end()});c.on('error',e=>{console.log('TCP_ERROR',e.code);process.exitCode=1});c.on('timeout',()=>{console.log('TCP_TIMEOUT');c.destroy();process.exitCode=1})"
+  ]});
+  console.log("STAGING_LOOPBACK_ACP",JSON.stringify({
+    code:probe.exitCode,detail:String(probe.stdout||"").trim().slice(0,120)
+  }));
+  const secretProbe=await internal("POST","exec",{argv:["node","-e",
+    "console.log(process.env.GROK_AGENT_SECRET?'GROK_TOKEN_PRESENT':'GROK_TOKEN_MISSING')"
+  ]});
+  console.log("STAGING_AGENT_CONFIG",String(secretProbe.stdout||"").trim());
   // Separate a dead daemon/port from a WebSocket handshake/proxy failure.
   const port=await internal("GET","acp-port-health",undefined,15_000);
   console.log("STAGING_ACP_PORT_HEALTH",JSON.stringify(port));
