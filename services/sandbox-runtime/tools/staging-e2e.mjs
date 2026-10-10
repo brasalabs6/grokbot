@@ -517,6 +517,56 @@ try {
   } finally {
     ws.close();
   }
+
+  // Opt-in staging acceptance: resume the exact disposable workspace from a
+  // checkpoint, verify filesystem integrity and real inference afterwards.
+  // The cleanup handler below then destroys the resumed container.
+  if (process.env.STAGING_TEST_RESTORE === "1") {
+    const snapshot = await internal(
+      "POST",
+      "stop",
+      { checkpoint: true, operationId: randomUUID() },
+      120_000
+    );
+    if (snapshot.running !== false || !snapshot.snapshotId) {
+      throw new Error("SNAPSHOT_STOP_UNCONFIRMED");
+    }
+    const restored = await internal(
+      "POST",
+      "start",
+      { operationId: randomUUID() },
+      120_000
+    );
+    if (!restored.running || restored.generation !== generation + 1) {
+      throw new Error("SNAPSHOT_RESUME_UNCONFIRMED");
+    }
+    let restoredPort = null;
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      restoredPort = await internal("GET", "acp-port-health", undefined, 15_000);
+      if (restoredPort.ready) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (!restoredPort?.ready) {
+      throw new Error("RESUMED_ACP_NOT_READY");
+    }
+    const persisted = await internal("POST", "files", {
+      op: "read",
+      path: "grokbot-stage-proof.txt",
+    });
+    if (!persisted.ok || String(persisted.content).trim() !== mark) {
+      throw new Error("SNAPSHOT_WORKSPACE_NOT_RESTORED");
+    }
+    const restoredProxy = await internal(
+      "POST",
+      "exec",
+      { argv: ["node", "-e", inferenceCode] },
+      65_000
+    );
+    if (restoredProxy.exitCode !== 0) {
+      throw new Error("RESUMED_PROXY_INFERENCE_FAILED");
+    }
+    console.log("STAGING_SNAPSHOT_RESTORE_AND_PROXY_PASSED");
+  }
 } finally {
   if (startAttempted) {
     try {
