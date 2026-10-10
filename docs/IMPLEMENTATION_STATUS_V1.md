@@ -60,3 +60,26 @@ Last updated: 2026-10-09. **Work in progress; no production release.**
 - There has been no merge into main and no application production deployment.
 
 **Current status: successful GitHub Actions Cloudflare staging deploy and local Docker ACP acceptance; live Grok-on-Workers-AI and terminal/recovery E2E still pending.**
+
+## Proxy inference change — 2026-10-09
+
+The operator explicitly selected the inference proxy configured in the
+local Grok Build `~/.grok/config.toml`, instead of the earlier direct
+Cloudflare Workers AI `AI.run` route.
+
+- Architecture decision: [ADR-002](ADR-002-PROXY-INFERENCE.md).
+- Endpoint: `https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1`.
+- Default: `cf-qwen3.8-27b` (`@cf/qwen/qwen3.8-27b`).
+- Auxiliary: `cf-glm-5.3-flash` (`@cf/zai-org/glm-5.3-flash`).
+- Eight model profiles mirrored **without credentials** in
+  `services/sandbox-runtime/config/grok-models.toml`.
+- Inference binding now forwards OpenAI-compatible chat/tool-call/SSE responses
+  through trusted Worker code, with a fixed origin/model allowlist.
+- All local model profiles share one proxy API key. It is never committed or
+  sent to the container. The operator must configure protected staging
+  GitHub secret `GROKBOT_PROXY_API_KEY` with the existing local key.
+- Staging deployment installs that secret into the Cloudflare Worker with
+  `wrangler secret put` before publication.
+- Full proxy HTTPS and Grok tool-call E2E **not yet validated**.
+- The old direct Workers AI gateway implementation has been replaced for
+  the branch; earlier direct-binding verification is historical only.
