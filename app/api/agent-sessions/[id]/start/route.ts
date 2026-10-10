@@ -121,7 +121,7 @@ export async function POST(request: Request, { params }: Params) {
       status: uncertain ? "OUTCOME_UNKNOWN" : "FAILED",
     }).catch(() => null);
     await setAgentSessionState({
-      from: "PROVISIONING",
+      from: claimed.session.state as "PROVISIONING" | "RESUMING",
       ownerId: logged.user.id,
       sessionId: id,
       to: uncertain ? "RECOVERING" : "FAILED",
