@@ -82,3 +82,15 @@ jobs:
             echo 'Workspace symlink escape unexpectedly permitted'
             exit 1
           fi
+
+      - name: Verify Grok ACP daemon boots without outbound Internet
+        env:
+          GROK_AGENT_SECRET: offline-ci-smoke-secret
+        run: |
+          docker run --rm -d --network none --name grokbot-acp-offline \
+            -e GROK_AGENT_SECRET grokbot-acp-test
+          trap 'docker rm -f grokbot-acp-offline || true' EXIT
+          docker cp services/sandbox-runtime/tools/local-server-smoke.mjs \
+            grokbot-acp-offline:/tmp/offline-smoke.mjs
+          sleep 12
+          docker exec grokbot-acp-offline node /tmp/offline-smoke.mjs
