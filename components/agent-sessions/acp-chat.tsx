@@ -301,18 +301,39 @@ export function AcpChat({
                 }
                 session.current = created;
               }
+              // The ACP transport being connected does NOT mean the session
+              // database is READY. Await the control plane's generation-fenced
+              // confirmation, rather than racing the user's first prompt.
+              let confirmed = false;
+              for (let attempt = 0; attempt < 6 && !disposed; attempt++) {
+                const response = await fetch(
+                  "/api/agent-sessions/" + sessionId + "/reconcile",
+                  {
+                    body: "{}",
+                    cache: "no-store",
+                    headers: { "Content-Type": "application/json" },
+                    method: "POST",
+                  }
+                );
+                if (response.ok) {
+                  confirmed = true;
+                  break;
+                }
+                if (response.status !== 409) {
+                  const payload = (await response.json().catch(() => null)) as
+                    | { error?: { code?: string } }
+                    | null;
+                  throw new Error(payload?.error?.code ?? "ACP_RECONCILE_FAILED");
+                }
+                await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+              }
+              if (!confirmed) {
+                throw new Error("ACP_RECONCILIATION_PENDING");
+              }
               if (!disposed) {
                 reconnectAttempt = 0;
                 setConnected(true);
                 setError(null);
-                // The control plane promotes READY only after its own
-                // generation-matched ACP health proof, never on client say-so.
-                void fetch("/api/agent-sessions/" + sessionId + "/reconcile", {
-                  body: "{}",
-                  cache: "no-store",
-                  headers: { "Content-Type": "application/json" },
-                  method: "POST",
-                }).catch(() => {});
               }
             } catch (err) {
               if (!disposed) {
