@@ -43,6 +43,9 @@ RUN printf '%s\n' \
 COPY --chown=node:node tools/acp-smoke.mjs /opt/grokbot/acp-smoke.mjs
 ENV HOME=/home/node
 ENV NODE_EXTRA_CA_CERTS=/etc/cloudflare/certs/cloudflare-containers-ca.crt
+ENV SSL_CERT_FILE=/home/node/.grok/ca-bundle.crt
+ENV CURL_CA_BUNDLE=/home/node/.grok/ca-bundle.crt
+ENV NODE_OPTIONS=--use-openssl-ca
 USER node
 WORKDIR /workspace
 # Each container serves ACP locally. The token is randomly generated per
