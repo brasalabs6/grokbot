@@ -249,6 +249,27 @@ try {
     }));
     throw new Error("ACP_DAEMON_PORT_UNREACHABLE_AFTER_45S");
   }
+  // Isolate the Workers AI HTTPS interception from the Grok agent's ACP layer.
+  // No Cloudflare API token is provided to the sandbox.
+  const inferenceCode=[
+    "const u='https://api.cloudflare.com/client/v4/accounts/a22f860070e687304a08ce46118dadf6/ai/v1/chat/completions';",
+    "fetch(u,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer grokbot-internal-placeholder'},",
+    "body:JSON.stringify({model:'@cf/openai/gpt-oss-120b',messages:[{role:'user',content:'Reply only OK'}],max_tokens:32,stream:false}),",
+    "signal:AbortSignal.timeout(45000)}).then(async r=>{let j=await r.json();",
+    "console.log(JSON.stringify({status:r.status,keys:Object.keys(j),choices:Array.isArray(j.choices),",
+    "contentType:r.headers.get('content-type'),errorCode:j.error?.code||null}));",
+    "if(!r.ok||!Array.isArray(j.choices))process.exitCode=1",
+    "}).catch(e=>{console.log('PROXY_ERROR_'+e.name);process.exitCode=1})"
+  ].join("");
+  if(inferenceCode.length>1024)throw new Error("INFERENCE_PROBE_TOO_LONG");
+  const gateway=await internal("POST","exec",{
+    argv:["node","-e",inferenceCode]
+  },65_000);
+  console.log("STAGING_WORKERS_AI_PROXY",JSON.stringify({
+    exitCode:gateway.exitCode,details:String(gateway.stdout||"").trim().slice(0,550),
+    stderr:String(gateway.stderr||"").trim().slice(0,180)
+  }));
+  if(gateway.exitCode!==0)throw new Error("WORKERS_AI_GATEWAY_PROBE_FAILED");
   const {ws,rpc,seen}=await connectAcp(generation);
   try {
     const created=await rpc("session/new",{
