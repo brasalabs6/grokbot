@@ -13,7 +13,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const fetcher = async (url: string) => {
+export const fetcher = async <T = any>(url: string): Promise<T> => {
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -23,7 +23,7 @@ export const fetcher = async (url: string) => {
     throw new ChatbotError(code,cause);
   }
 
-  return response.json();
+  return (await response.json()) as T;
 };
 
 export async function fetchWithErrorHandlers(
