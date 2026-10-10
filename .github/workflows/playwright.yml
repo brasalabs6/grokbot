@@ -1,71 +1,53 @@
 name: Playwright Tests
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, feat/grokbot-p00-acp-cloudflare-spike]
   pull_request:
     branches: [main, master]
-
+permissions:
+  contents: read
 jobs:
   test:
-    timeout-minutes: 30
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     env:
-      # These should be the same ones as used in production
-      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-      POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-      REDIS_URL: ${{ secrets.REDIS_URL }}
-
+      # Disposable CI-only credentials, never shared with staging or production.
+      AUTH_SECRET: grokbot-ci-only-not-a-production-key-2026
+      AUTH_TRUST_HOST: "true"
+      POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/grokbot_test
+      GROKBOT_ALLOWED_EMAILS: internal-test@example.test
+      FEATURE_AGENT_RUNTIME: "0"
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: grokbot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d grokbot_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-          fetch-depth: 1
-
+          version: 10.32.1
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: latest
-          run_install: false
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - uses: actions/cache@v3
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: "pnpm"
-
+          node-version: "24"
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v3
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      - name: Install Playwright Browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: Apply isolated PostgreSQL migrations
+        run: pnpm db:migrate
+      - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run Playwright tests
+      - name: Run GrokBot browser acceptance tests
         run: pnpm test
-
       - uses: actions/upload-artifact@v4
         if: always() && !cancelled()
         with:
