@@ -13,6 +13,16 @@ interface Env {
 }
 const TIMEOUT_MS = 30 * 60 * 1000;
 const terminalName = /^[a-z0-9][a-z0-9-]{0,62}$/;
+// Cloudflare Containers 1.0 deliberately does not inherit the image/start
+// environment into exec() processes. Explicitly inject ONLY non-secret
+// trust paths and a normal home directory for user-facing commands.
+const PROCESS_ENV: Record<string,string> = {
+  HOME: "/home/node",
+  NODE_OPTIONS: "--use-openssl-ca",
+  NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
+  SSL_CERT_FILE: "/home/node/.grok/ca-bundle.crt",
+  CURL_CA_BUNDLE: "/home/node/.grok/ca-bundle.crt",
+};
 const error = (code: string, status: number) =>
   Response.json({ error: { code } }, { status });
 const restrictedHeader = (request: Request, secret: string) => {
@@ -151,7 +161,7 @@ export class SessionSandbox extends DurableObject<Env> {
     ) {
       throw new Error("INVALID_ARGV");
     }
-    const proc = await this.container().exec(argv, { cwd: "/workspace" });
+    const proc = await this.container().exec(argv, { cwd: "/workspace", env: PROCESS_ENV, user: "1000:1000" });
     const result = await proc.output();
     return {
       exitCode: result.exitCode,
@@ -490,7 +500,8 @@ export class SessionSandbox extends DurableObject<Env> {
       ["tmux", "new-session", "-A", "-s", terminal],
       {
         cwd: "/workspace",
-        env: { TERM: "xterm-256color" },
+        env: {...PROCESS_ENV, TERM: "xterm-256color" },
+        user: "1000:1000",
         pty: {
           cols: resizeNumber(url.searchParams.get("cols"), 80),
           rows: resizeNumber(url.searchParams.get("rows"), 24),
