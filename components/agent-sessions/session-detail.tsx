@@ -29,8 +29,45 @@ export function SessionDetail({
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("chat");
   const [startBusy, setStartBusy] = useState(false);
+  const [stopBusy, setStopBusy] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [currentState, setCurrentState] = useState(initialState);
+  useEffect(() => {
+    setCurrentState(initialState);
+  }, [initialState]);
+
+  async function stopContainer() {
+    if (!window.confirm("Stop this sandbox after taking a checkpoint? Run only when there is no active agent task.")) {
+      return;
+    }
+    setStopBusy(true);
+    setStartError(null);
+    try {
+      const response = await fetch(`/api/agent-sessions/${id}/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expectedSessionVersion: stateVersion,
+          operationId: crypto.randomUUID(),
+          checkpoint: true,
+        }),
+      });
+      const payload = (await response.json()) as {
+        state?: string;
+        error?: { code?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.code ?? "STOP_OUTCOME_UNKNOWN");
+      }
+      setCurrentState(payload.state ?? "STOPPED");
+      router.refresh();
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : "Stop outcome unknown");
+      router.refresh();
+    } finally {
+      setStopBusy(false);
+    }
+  }
   async function startContainer() {
     setStartBusy(true);
     setStartError(null);
@@ -121,12 +158,24 @@ export function SessionDetail({
         className="flex min-h-[400px] flex-1 flex-col rounded-xl border p-4 md:p-6"
         role="tabpanel"
       >
-        <p className="mb-4 text-xs text-muted-foreground">
-          Session {id} · {modelId} · Generation {generation}
-        </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Session {id} · {modelId} · Generation {generation} · {currentState}
+          </p>
+          {["READY", "IDLE", "DEGRADED"].includes(currentState) && (
+            <Button
+              disabled={stopBusy || startBusy}
+              onClick={() => void stopContainer()}
+              size="sm"
+              variant="outline"
+            >
+              {stopBusy ? "Stopping…" : "Stop and checkpoint"}
+            </Button>
+          )}
+        </div>
         {panel === "chat" && (
           <>
-            {currentState === "CREATED" && (
+            {["CREATED", "STOPPED", "SUSPENDED"].includes(currentState) && (
               <div className="grid flex-1 place-content-center text-center">
                 <h2 className="font-semibold">Start your Grok workspace</h2>
                 <p className="mt-2 max-w-md text-sm text-muted-foreground">
@@ -140,7 +189,9 @@ export function SessionDetail({
                 >
                   {startBusy
                     ? "Requesting sandbox…"
-                    : "Provision Cloudflare sandbox"}
+                    : currentState === "CREATED"
+                      ? "Provision Cloudflare sandbox"
+                      : "Resume Cloudflare sandbox"}
                 </Button>
                 {startError && (
                   <p className="mt-3 text-sm text-red-500" role="alert">
