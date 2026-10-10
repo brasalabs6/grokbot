@@ -169,6 +169,8 @@ export class SessionSandbox extends DurableObject<Env> {
               env: {
                 GROK_AGENT_SECRET: agentSecret,
                 GROKBOT_EXPECT_PROXY_CA: "1",
+                NODE_EXTRA_CA_CERTS:
+                  "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
                 ...diagnosticEnv,
               },
               instance: "standard-1",
