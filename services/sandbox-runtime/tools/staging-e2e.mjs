@@ -235,7 +235,18 @@ try {
     const diagnostic = await internal("POST","exec",{argv:["node","-e",
       "const f=require('node:fs');let log='';try{log=f.readFileSync('/tmp/grokbot-boot-diagnostics.log','utf8')}catch{}let secret='';try{secret=f.readFileSync('/proc/1/environ','utf8').split('\\0').find(x=>x.startsWith('GROK_AGENT_SECRET='))?.slice(18)||''}catch{}for(const line of log.split('\\n').filter(x=>/error|warn|fail|network|tls|auth|connect|listen|model|startup/i.test(x)).slice(-12)){let safe=secret?line.replaceAll(secret,'[REDACTED]'):line;safe=safe.replace(/server-key[^\\s]*/ig,'server-key=[REDACTED]');console.log(safe.slice(0,220))}if(!log)console.log('NO_BOOT_LOG')"
     ]});
-    console.log("STAGING_DAEMON_DIAGNOSTICS",String(diagnostic.stdout||"").slice(0,1700));
+    console.log("STAGING_DAEMON_DIAGNOSTICS",JSON.stringify({
+      exitCode:diagnostic.exitCode,
+      stdout:String(diagnostic.stdout||"").slice(0,1500),
+      stderr:String(diagnostic.stderr||"").replace(/server-key[^\\s]*/ig,"server-key=[REDACTED]").slice(0,350)
+    }));
+    const categories = await internal("POST","exec",{argv:["node","-e",
+      "const f=require('fs');let s='';try{s=f.readFileSync('/tmp/grokbot-boot-diagnostics.log','utf8')}catch(e){console.log('BOOT_LOG_ERROR='+e.code);process.exit(0)}console.log('BOOT_BYTES='+s.length);for(const p of ['error','failed','network','auth','connect','listen','model','https','certificate','timeout','offline'])console.log('BOOT_'+p.toUpperCase()+'='+s.toLowerCase().includes(p))"
+    ]});
+    console.log("STAGING_BOOT_CLASSIFICATION",JSON.stringify({
+      code:categories.exitCode,details:String(categories.stdout||"").slice(0,950),
+      stderr:String(categories.stderr||"").slice(0,120)
+    }));
     throw new Error("ACP_DAEMON_PORT_UNREACHABLE_AFTER_45S");
   }
   const {ws,rpc,seen}=await connectAcp(generation);
