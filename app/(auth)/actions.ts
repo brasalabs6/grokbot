@@ -3,6 +3,7 @@
 import { z } from "zod";
 
 import { createUser, getUser } from "@/lib/db/queries";
+import { isInternalEmailAllowed } from "@/lib/auth/access-policy";
 
 import { signIn } from "./auth";
 
@@ -48,6 +49,7 @@ export type RegisterActionState = {
     | "success"
     | "failed"
     | "user_exists"
+    | "not_allowed"
     | "invalid_data";
 };
 
@@ -60,6 +62,10 @@ export const register = async (
       email: formData.get("email"),
       password: formData.get("password"),
     });
+
+    if (!isInternalEmailAllowed(validatedData.email)) {
+      return { status: "not_allowed" };
+    }
 
     const [user] = await getUser(validatedData.email);
 
