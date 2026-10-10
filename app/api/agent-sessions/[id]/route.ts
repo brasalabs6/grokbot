@@ -36,6 +36,9 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!user?.user || user.user.type === "guest") {
     return Response.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
   }
+  if (request.headers.get("Origin") !== new URL(request.url).origin) {
+    return Response.json({ error: { code: "INVALID_ORIGIN" } }, { status: 403 });
+  }
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) {
     return Response.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
