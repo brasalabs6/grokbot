@@ -4,6 +4,9 @@ import { signIn } from "@/app/(auth)/auth";
 import { isDevelopmentEnvironment } from "@/lib/constants";
 
 export async function GET(request: Request) {
+  if (process.env.GROKBOT_ENABLE_GUEST !== "1") {
+    return Response.json({ error: { code: "GUEST_DISABLED" } }, { status: 404 });
+  }
   const { searchParams } = new URL(request.url);
   const rawRedirect = searchParams.get("redirectUrl") || "/";
   const redirectUrl =
