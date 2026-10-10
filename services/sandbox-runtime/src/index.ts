@@ -113,7 +113,7 @@ export class SessionSandbox extends DurableObject<Env> {
         await this.ctx.storage.put("grokAgentSecret",agentSecret);
       }
       const snapshotId = await this.ctx.storage.get<string>("snapshotId");
-      const diagnosticEnv=this.env.GROKBOT_BOOT_DIAGNOSTICS==="1"
+      const diagnosticEnv:Record<string,string>=this.env.GROKBOT_BOOT_DIAGNOSTICS==="1"
         ? {GROKBOT_BOOT_DIAGNOSTICS:"1"} : {};
       container.start(
         snapshotId
