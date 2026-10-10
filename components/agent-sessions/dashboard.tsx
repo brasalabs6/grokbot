@@ -21,7 +21,7 @@ export function AgentSessionsDashboard({
 }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [model, setModel] = useState("@cf/openai/gpt-oss-120b");
+  const [model, setModel] = useState("cf-qwen3.8-27b");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function create() {
@@ -83,10 +83,11 @@ export function AgentSessionsDashboard({
             />
           </label>
           <label className="grid gap-1 text-sm">
-            Cloudflare model
+            Grok model (existing Brasamain proxy)
             <Input
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="@cf/openai/gpt-oss-120b"
+              readOnly
+              aria-label="CF Qwen 3.8 27B (tested model)"
+              placeholder="cf-qwen3.8-27b"
               value={model}
             />
           </label>
