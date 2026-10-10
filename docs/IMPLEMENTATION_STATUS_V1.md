@@ -2,6 +2,12 @@
 
 Last updated: 2026-10-09. **Work in progress; no production release.**
 
+## Latest verified milestone
+
+**PASS: live staging Grok + Qwen inference proxy + real coding-agent tools + PTY/tmux.** GitHub Actions run [38017545630](https://github.com/brasalabs6/grokbot/actions/runs/38017545630) completed successfully in 23 seconds. The model request returned HTTP 200; the agent created a uniquely marked workspace file and the test verified its contents. Sandbox cleanup passed. Evidence: [EVIDENCE-STAGING-QWEN-2026-10-09.md](EVIDENCE-STAGING-QWEN-2026-10-09.md).
+
+Core feasibility is validated. The full V1 (frontend, migrations, backup/restore, recovery, security and broad E2E) remains incomplete. Older entries below describe historical blockers before this passing test.
+
 ## Source of truth
 
 - Spec: `docs/FEATURE_SPEC_V1.md` on main.
