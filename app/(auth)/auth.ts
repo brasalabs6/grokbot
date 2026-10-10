@@ -3,6 +3,7 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { DUMMY_PASSWORD } from "@/lib/constants";
+import { isInternalEmailAllowed } from "@/lib/auth/access-policy";
 import { createGuestUser, getUser } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
 
@@ -60,6 +61,10 @@ export const {
       async authorize(credentials) {
         const email = String(credentials.email ?? "");
         const password = String(credentials.password ?? "");
+        if (!isInternalEmailAllowed(email)) {
+          await compare(password, DUMMY_PASSWORD);
+          return null;
+        }
         const users = await getUser(email);
 
         if (users.length === 0) {
