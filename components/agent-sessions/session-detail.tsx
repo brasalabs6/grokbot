@@ -5,8 +5,8 @@ import {
   MessageSquare,
   TerminalSquare,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AcpChat } from "./acp-chat";
 import { AgentTerminal } from "./agent-terminal";
@@ -28,27 +28,34 @@ export function SessionDetail({
 }) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("chat");
-  const [startBusy,setStartBusy] = useState(false);
-  const [startError,setStartError] = useState<string|null>(null);
-  const [currentState,setCurrentState] = useState(initialState);
+  const [startBusy, setStartBusy] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [currentState, setCurrentState] = useState(initialState);
   async function startContainer() {
     setStartBusy(true);
     setStartError(null);
     try {
-      const response=await fetch("/api/agent-sessions/"+id+"/start",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          operationId:crypto.randomUUID(),
-          expectedSessionVersion:stateVersion
-        })
+      const response = await fetch("/api/agent-sessions/" + id + "/start", {
+        body: JSON.stringify({
+          expectedSessionVersion: stateVersion,
+          operationId: crypto.randomUUID(),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
-      const result=await response.json() as {error?:{code?:string};state?:string};
-      if(!response.ok)throw new Error(result.error?.code??"RUNTIME_START_FAILED");
-      setCurrentState(result.state??"PROVISIONING");
+      const result = (await response.json()) as {
+        error?: { code?: string };
+        state?: string;
+      };
+      if (!response.ok) {
+        throw new Error(result.error?.code ?? "RUNTIME_START_FAILED");
+      }
+      setCurrentState(result.state ?? "PROVISIONING");
       router.refresh();
-    } catch(error) {
-      setStartError(error instanceof Error?error.message:"Unexpected error");
+    } catch (error) {
+      setStartError(
+        error instanceof Error ? error.message : "Unexpected error"
+      );
     } finally {
       setStartBusy(false);
     }
@@ -123,29 +130,63 @@ export function SessionDetail({
               <div className="grid flex-1 place-content-center text-center">
                 <h2 className="font-semibold">Start your Grok workspace</h2>
                 <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                  The Cloudflare sandbox is provisioned on demand. The agent connects
-                  over a signed, short-lived ACP WebSocket capability.
+                  The Cloudflare sandbox is provisioned on demand. The agent
+                  connects over a signed, short-lived ACP WebSocket capability.
                 </p>
-                <Button className="mx-auto mt-4" disabled={startBusy}
-                  onClick={()=>void startContainer()}>
-                  {startBusy?"Requesting sandbox…":"Provision Cloudflare sandbox"}
+                <Button
+                  className="mx-auto mt-4"
+                  disabled={startBusy}
+                  onClick={() => void startContainer()}
+                >
+                  {startBusy
+                    ? "Requesting sandbox…"
+                    : "Provision Cloudflare sandbox"}
                 </Button>
-                {startError && <p role="alert" className="mt-3 text-sm text-red-500">
-                  {startError}
-                </p>}
+                {startError && (
+                  <p className="mt-3 text-sm text-red-500" role="alert">
+                    {startError}
+                  </p>
+                )}
               </div>
             )}
-            <AcpChat sessionId={id}
-              active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
+            <AcpChat
+              active={[
+                "PROVISIONING",
+                "READY",
+                "IDLE",
+                "RUNNING",
+                "WAITING_APPROVAL",
+                "DEGRADED",
+              ].includes(currentState)}
+              sessionId={id}
+            />
           </>
         )}
         {panel === "terminal" && (
-          <AgentTerminal sessionId={id}
-            active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
+          <AgentTerminal
+            active={[
+              "PROVISIONING",
+              "READY",
+              "IDLE",
+              "RUNNING",
+              "WAITING_APPROVAL",
+              "DEGRADED",
+            ].includes(currentState)}
+            sessionId={id}
+          />
         )}
         {panel === "files" && (
-          <FileBrowser sessionId={id}
-            active={["PROVISIONING","READY","IDLE","RUNNING","WAITING_APPROVAL","DEGRADED"].includes(currentState)}/>
+          <FileBrowser
+            active={[
+              "PROVISIONING",
+              "READY",
+              "IDLE",
+              "RUNNING",
+              "WAITING_APPROVAL",
+              "DEGRADED",
+            ].includes(currentState)}
+            sessionId={id}
+          />
         )}
         {panel === "activity" && (
           <div>

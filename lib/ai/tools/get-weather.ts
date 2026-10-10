@@ -13,7 +13,9 @@ async function geocodeCity(
       return null;
     }
 
-    const data = (await response.json()) as { results?: { latitude: number; longitude: number }[] };
+    const data = (await response.json()) as {
+      results?: { latitude: number; longitude: number }[];
+    };
 
     if (!data.results || data.results.length === 0) {
       return null;

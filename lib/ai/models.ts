@@ -77,7 +77,12 @@ export async function getCapabilities(): Promise<
           return [model.id, { reasoning: false, tools: false, vision: false }];
         }
 
-        const json = (await res.json()) as { data?: { endpoints?: { supported_parameters?: string[] }[]; architecture?: { input_modalities?: string[] } } & GatewayModel[] };
+        const json = (await res.json()) as {
+          data?: {
+            endpoints?: { supported_parameters?: string[] }[];
+            architecture?: { input_modalities?: string[] };
+          } & GatewayModel[];
+        };
         const endpoints = json.data?.endpoints ?? [];
         const params = new Set(
           endpoints.flatMap(
@@ -130,7 +135,12 @@ export async function getAllGatewayModels(): Promise<
       return [];
     }
 
-    const json = (await res.json()) as { data?: { endpoints?: { supported_parameters?: string[] }[]; architecture?: { input_modalities?: string[] } } & GatewayModel[] };
+    const json = (await res.json()) as {
+      data?: {
+        endpoints?: { supported_parameters?: string[] }[];
+        architecture?: { input_modalities?: string[] };
+      } & GatewayModel[];
+    };
     return (json.data ?? [])
       .filter((m: GatewayModel) => m.type === "language")
       .map((m: GatewayModel) => ({
@@ -215,7 +225,12 @@ export async function getModelAvailability(
       return "unknown";
     }
 
-    const json = (await res.json()) as { data?: { endpoints?: { supported_parameters?: string[] }[]; architecture?: { input_modalities?: string[] } } & GatewayModel[] };
+    const json = (await res.json()) as {
+      data?: {
+        endpoints?: { supported_parameters?: string[] }[];
+        architecture?: { input_modalities?: string[] };
+      } & GatewayModel[];
+    };
     const endpoints = (json.data?.endpoints ?? []) as GatewayEndpoint[];
 
     if (endpoints.length === 0) {

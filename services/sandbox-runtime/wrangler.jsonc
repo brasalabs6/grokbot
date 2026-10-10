@@ -38,7 +38,5 @@
       "GROKBOT_PROXY_API_KEY"
     ]
   },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+  "compatibility_flags": ["nodejs_compat"]
 }

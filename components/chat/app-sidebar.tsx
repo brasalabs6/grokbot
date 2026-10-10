@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  MessageSquareIcon,
   BotIcon,
+  MessageSquareIcon,
   PanelLeftIcon,
   PenSquareIcon,
   TrashIcon,
@@ -132,7 +132,20 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                     <span className="font-medium">New chat</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {user ? (<SidebarMenuItem><SidebarMenuButton asChild tooltip="Agent sessions" className="rounded-lg text-sidebar-foreground/80"><Link href="/agent-sessions" onClick={closeMobile}><BotIcon className="size-4"/><span>Agent sessions</span></Link></SidebarMenuButton></SidebarMenuItem>) : null}
+                {user ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      className="rounded-lg text-sidebar-foreground/80"
+                      tooltip="Agent sessions"
+                    >
+                      <Link href="/agent-sessions" onClick={closeMobile}>
+                        <BotIcon className="size-4" />
+                        <span>Agent sessions</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
                 {user ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton

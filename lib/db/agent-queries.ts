@@ -382,28 +382,52 @@ export async function listAgentEvents(
 }
 
 /** Record physical container generation; this does NOT mark ACP as READY. */
-export async function recordProvisionedSandbox(args:{
-  sessionId:string;ownerId:string;expectedVersion:number;generation:number;
-}){
-  if(!Number.isSafeInteger(args.generation)||args.generation<1)
+export async function recordProvisionedSandbox(args: {
+  sessionId: string;
+  ownerId: string;
+  expectedVersion: number;
+  generation: number;
+}) {
+  if (!Number.isSafeInteger(args.generation) || args.generation < 1) {
     throw new AgentConflict("GENERATION_CONFLICT");
-  return db.transaction(async tx=>{
-    const [existing]=await tx.select().from(agentSession).where(
-      and(eq(agentSession.id,args.sessionId),eq(agentSession.ownerId,args.ownerId),
-          isNull(agentSession.deletedAt))
-    ).for("update");
-    if(!existing)return null;
-    if(!["PROVISIONING","RESUMING"].includes(existing.state)||existing.stateVersion!==args.expectedVersion)
+  }
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(agentSession)
+      .where(
+        and(
+          eq(agentSession.id, args.sessionId),
+          eq(agentSession.ownerId, args.ownerId),
+          isNull(agentSession.deletedAt)
+        )
+      )
+      .for("update");
+    if (!existing) {
+      return null;
+    }
+    if (
+      !["PROVISIONING", "RESUMING"].includes(existing.state) ||
+      existing.stateVersion !== args.expectedVersion
+    ) {
       throw new AgentConflict("VERSION_CONFLICT");
-    if(args.generation<existing.generation)
+    }
+    if (args.generation < existing.generation) {
       throw new AgentConflict("GENERATION_CONFLICT");
-    await tx.update(agentSandbox).set({
-      state:"STARTING",generation:args.generation,lastError:null
-    }).where(eq(agentSandbox.sessionId,args.sessionId));
-    const [session]=await tx.update(agentSession).set({
-      generation:args.generation,stateVersion:existing.stateVersion+1,
-      updatedAt:new Date()
-    }).where(eq(agentSession.id,args.sessionId)).returning();
+    }
+    await tx
+      .update(agentSandbox)
+      .set({ generation: args.generation, lastError: null, state: "STARTING" })
+      .where(eq(agentSandbox.sessionId, args.sessionId));
+    const [session] = await tx
+      .update(agentSession)
+      .set({
+        generation: args.generation,
+        stateVersion: existing.stateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSession.id, args.sessionId))
+      .returning();
     return session;
   });
 }
@@ -412,121 +436,244 @@ export async function recordProvisionedSandbox(args:{
  * Transactional/idempotent START intent. Only the winner may dispatch
  * to Cloudflare. Later duplicate requests observe the same operation.
  */
-export async function claimStartOperation(args:{
-  sessionId:string;ownerId:string;operationId:string;expectedVersion:number;
-}){
-  return db.transaction(async tx=>{
-    const [session]=await tx.select().from(agentSession).where(and(
-      eq(agentSession.id,args.sessionId),eq(agentSession.ownerId,args.ownerId),
-      isNull(agentSession.deletedAt)
-    )).for("update");
-    if(!session)return null;
-    const [existing]=await tx.select().from(agentOperation).where(and(
-      eq(agentOperation.sessionId,args.sessionId),
-      eq(agentOperation.kind,"START"),
-      eq(agentOperation.idempotencyKey,args.operationId)
-    )).limit(1);
-    if(existing)return {session,operation:existing,claimed:false};
-    if(session.stateVersion!==args.expectedVersion)throw new AgentConflict("VERSION_CONFLICT");
-    if(session.state!=="CREATED")throw new AgentConflict("SESSION_NOT_READY");
-    const [operation]=await tx.insert(agentOperation).values({
-      id:args.operationId,sessionId:session.id,idempotencyKey:args.operationId,
-      kind:"START",state:"PENDING",expectedVersion:session.stateVersion,
-      generation:session.generation
-    }).returning();
-    const [updated]=await tx.update(agentSession).set({
-      state:"PROVISIONING",stateVersion:session.stateVersion+1,
-      updatedAt:new Date()
-    }).where(eq(agentSession.id,session.id)).returning();
-    return {session:updated,operation,claimed:true};
+export async function claimStartOperation(args: {
+  sessionId: string;
+  ownerId: string;
+  operationId: string;
+  expectedVersion: number;
+}) {
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(agentSession)
+      .where(
+        and(
+          eq(agentSession.id, args.sessionId),
+          eq(agentSession.ownerId, args.ownerId),
+          isNull(agentSession.deletedAt)
+        )
+      )
+      .for("update");
+    if (!session) {
+      return null;
+    }
+    const [existing] = await tx
+      .select()
+      .from(agentOperation)
+      .where(
+        and(
+          eq(agentOperation.sessionId, args.sessionId),
+          eq(agentOperation.kind, "START"),
+          eq(agentOperation.idempotencyKey, args.operationId)
+        )
+      )
+      .limit(1);
+    if (existing) {
+      return { claimed: false, operation: existing, session };
+    }
+    if (session.stateVersion !== args.expectedVersion) {
+      throw new AgentConflict("VERSION_CONFLICT");
+    }
+    if (session.state !== "CREATED") {
+      throw new AgentConflict("SESSION_NOT_READY");
+    }
+    const [operation] = await tx
+      .insert(agentOperation)
+      .values({
+        expectedVersion: session.stateVersion,
+        generation: session.generation,
+        id: args.operationId,
+        idempotencyKey: args.operationId,
+        kind: "START",
+        sessionId: session.id,
+        state: "PENDING",
+      })
+      .returning();
+    const [updated] = await tx
+      .update(agentSession)
+      .set({
+        state: "PROVISIONING",
+        stateVersion: session.stateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSession.id, session.id))
+      .returning();
+    return { claimed: true, operation, session: updated };
   });
 }
 
 /** Only update the operation created by this session. */
-export async function recordStartOperationStatus(args:{
-  operationId:string;sessionId:string;
-  status:"EXECUTING"|"FAILED"|"OUTCOME_UNKNOWN";
-}){
-  const [updated]=await db.update(agentOperation).set({
-    state:args.status,
-    ...(args.status==="FAILED"?{finishedAt:new Date()}: {})
-  }).where(and(
-    eq(agentOperation.id,args.operationId),
-    eq(agentOperation.sessionId,args.sessionId),
-    eq(agentOperation.kind,"START")
-  )).returning();
-  return updated??null;
+export async function recordStartOperationStatus(args: {
+  operationId: string;
+  sessionId: string;
+  status: "EXECUTING" | "FAILED" | "OUTCOME_UNKNOWN";
+}) {
+  const [updated] = await db
+    .update(agentOperation)
+    .set({
+      state: args.status,
+      ...(args.status === "FAILED" ? { finishedAt: new Date() } : {}),
+    })
+    .where(
+      and(
+        eq(agentOperation.id, args.operationId),
+        eq(agentOperation.sessionId, args.sessionId),
+        eq(agentOperation.kind, "START")
+      )
+    )
+    .returning();
+  return updated ?? null;
 }
 
 /** A verified ACP session binds the durable sandbox generation to an owner. */
-export async function confirmAgentReady(args:{
-  sessionId:string;ownerId:string;generation:number;
+export async function confirmAgentReady(args: {
+  sessionId: string;
+  ownerId: string;
+  generation: number;
 }) {
-  return db.transaction(async tx=>{
-    const [session]=await tx.select().from(agentSession).where(and(
-      eq(agentSession.id,args.sessionId),
-      eq(agentSession.ownerId,args.ownerId),
-      isNull(agentSession.deletedAt)
-    )).for("update");
-    if(!session)return null;
-    if(session.generation!==args.generation)
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(agentSession)
+      .where(
+        and(
+          eq(agentSession.id, args.sessionId),
+          eq(agentSession.ownerId, args.ownerId),
+          isNull(agentSession.deletedAt)
+        )
+      )
+      .for("update");
+    if (!session) {
+      return null;
+    }
+    if (session.generation !== args.generation) {
       throw new AgentConflict("GENERATION_CONFLICT");
-    if(session.state==="READY"||session.state==="IDLE")return session;
-    if(!["PROVISIONING","RECOVERING","RESUMING"].includes(session.state))
+    }
+    if (session.state === "READY" || session.state === "IDLE") {
+      return session;
+    }
+    if (!["PROVISIONING", "RECOVERING", "RESUMING"].includes(session.state)) {
       throw new AgentConflict("SESSION_NOT_READY");
-    const [updated]=await tx.update(agentSession).set({
-      state:"READY",stateVersion:session.stateVersion+1,updatedAt:new Date()
-    }).where(eq(agentSession.id,session.id)).returning();
-    await tx.update(agentSandbox).set({
-      state:"RUNNING",generation:args.generation,lastHeartbeat:new Date()
-    }).where(eq(agentSandbox.sessionId,session.id));
+    }
+    const [updated] = await tx
+      .update(agentSession)
+      .set({
+        state: "READY",
+        stateVersion: session.stateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSession.id, session.id))
+      .returning();
+    await tx
+      .update(agentSandbox)
+      .set({
+        generation: args.generation,
+        lastHeartbeat: new Date(),
+        state: "RUNNING",
+      })
+      .where(eq(agentSandbox.sessionId, session.id));
     return updated;
   });
 }
 
 /** Reconcile only a generation-matched terminal result observed by the trusted DO. */
-export async function reconcileCompletedAgentRun(args:{
-  sessionId:string;ownerId:string;runId:string;generation:number;
-  status:"SUCCEEDED"|"FAILED"|"CANCELLED";endedAt:number;
-}){
-  if(!Number.isSafeInteger(args.endedAt)||args.endedAt<0||
-     args.endedAt>Date.now()+60_000)throw new AgentConflict("VERSION_CONFLICT");
-  return db.transaction(async tx=>{
-    const [session]=await tx.select().from(agentSession).where(and(
-      eq(agentSession.id,args.sessionId),eq(agentSession.ownerId,args.ownerId),
-      isNull(agentSession.deletedAt)
-    )).for("update");
-    if(!session)return null;
-    const [run]=await tx.select().from(agentRun).where(and(
-      eq(agentRun.id,args.runId),eq(agentRun.sessionId,args.sessionId)
-    )).for("update");
-    if(!run)return null;
-    if(session.generation!==args.generation||run.generation!==args.generation)
-      throw new AgentConflict("GENERATION_CONFLICT");
-    if(run.state==="SUCCEEDED"||run.state==="FAILED"||run.state==="CANCELLED"){
-      if(run.state!==args.status)throw new AgentConflict("VERSION_CONFLICT");
-      return {session,run,idempotent:true};
+export async function reconcileCompletedAgentRun(args: {
+  sessionId: string;
+  ownerId: string;
+  runId: string;
+  generation: number;
+  status: "SUCCEEDED" | "FAILED" | "CANCELLED";
+  endedAt: number;
+}) {
+  if (
+    !Number.isSafeInteger(args.endedAt) ||
+    args.endedAt < 0 ||
+    args.endedAt > Date.now() + 60_000
+  ) {
+    throw new AgentConflict("VERSION_CONFLICT");
+  }
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(agentSession)
+      .where(
+        and(
+          eq(agentSession.id, args.sessionId),
+          eq(agentSession.ownerId, args.ownerId),
+          isNull(agentSession.deletedAt)
+        )
+      )
+      .for("update");
+    if (!session) {
+      return null;
     }
-    if(session.currentRunId!==run.id)
+    const [run] = await tx
+      .select()
+      .from(agentRun)
+      .where(
+        and(eq(agentRun.id, args.runId), eq(agentRun.sessionId, args.sessionId))
+      )
+      .for("update");
+    if (!run) {
+      return null;
+    }
+    if (
+      session.generation !== args.generation ||
+      run.generation !== args.generation
+    ) {
+      throw new AgentConflict("GENERATION_CONFLICT");
+    }
+    if (
+      run.state === "SUCCEEDED" ||
+      run.state === "FAILED" ||
+      run.state === "CANCELLED"
+    ) {
+      if (run.state !== args.status) {
+        throw new AgentConflict("VERSION_CONFLICT");
+      }
+      return { idempotent: true, run, session };
+    }
+    if (session.currentRunId !== run.id) {
       throw new AgentConflict("VERSION_CONFLICT");
-    const [updatedRun]=await tx.update(agentRun).set({
-      state:args.status,endedAt:new Date(args.endedAt),
-      finishReason:args.status==="SUCCEEDED"?"completed":"remote_"+args.status.toLowerCase()
-    }).where(eq(agentRun.id,run.id)).returning();
-    const [updatedSession]=await tx.update(agentSession).set({
-      state:args.status==="SUCCEEDED"?"IDLE":"DEGRADED",
-      currentRunId:null,stateVersion:session.stateVersion+1,
-      updatedAt:new Date()
-    }).where(eq(agentSession.id,session.id)).returning();
-    const [head]=await tx.select({
-      seq:sql<number>`coalesce(max(${agentEvent.seq}),0)`
-    }).from(agentEvent).where(eq(agentEvent.sessionId,session.id));
+    }
+    const [updatedRun] = await tx
+      .update(agentRun)
+      .set({
+        endedAt: new Date(args.endedAt),
+        finishReason:
+          args.status === "SUCCEEDED"
+            ? "completed"
+            : "remote_" + args.status.toLowerCase(),
+        state: args.status,
+      })
+      .where(eq(agentRun.id, run.id))
+      .returning();
+    const [updatedSession] = await tx
+      .update(agentSession)
+      .set({
+        currentRunId: null,
+        state: args.status === "SUCCEEDED" ? "IDLE" : "DEGRADED",
+        stateVersion: session.stateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSession.id, session.id))
+      .returning();
+    const [head] = await tx
+      .select({
+        seq: sql<number>`coalesce(max(${agentEvent.seq}),0)`,
+      })
+      .from(agentEvent)
+      .where(eq(agentEvent.sessionId, session.id));
     await tx.insert(agentEvent).values({
-      id:crypto.randomUUID(),sessionId:session.id,runId:run.id,
-      generation:args.generation,seq:Number(head?.seq??0)+1,
-      type:"run.finished",payload:{status:args.status,source:"cloudflare-grok-acp"},
-      payloadVersion:1
+      generation: args.generation,
+      id: crypto.randomUUID(),
+      payload: { source: "cloudflare-grok-acp", status: args.status },
+      payloadVersion: 1,
+      runId: run.id,
+      seq: Number(head?.seq ?? 0) + 1,
+      sessionId: session.id,
+      type: "run.finished",
     });
-    return {session:updatedSession,run:updatedRun,idempotent:false};
+    return { idempotent: false, run: updatedRun, session: updatedSession };
   });
 }
