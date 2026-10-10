@@ -222,9 +222,16 @@ try {
   ]});
   console.log("STAGING_DAEMON_PROCESS",String(daemonProbe.stdout||"").trim().slice(0,240));
   // Separate a dead daemon/port from a WebSocket handshake/proxy failure.
-  const port=await internal("GET","acp-port-health",undefined,15_000);
+  // The container's "running" state precedes the Grok daemon's socket
+  // readiness. Poll a bounded window instead of falsely failing at ~3 s.
+  let port=null;
+  for(let attempt=0;attempt<45;attempt++){
+    port=await internal("GET","acp-port-health",undefined,15_000);
+    if(port.ready)break;
+    await new Promise(resolve=>setTimeout(resolve,1000));
+  }
   console.log("STAGING_ACP_PORT_HEALTH",JSON.stringify(port));
-  if(!port.ready)throw new Error("ACP_DAEMON_PORT_UNREACHABLE");
+  if(!port?.ready)throw new Error("ACP_DAEMON_PORT_UNREACHABLE_AFTER_45S");
   const {ws,rpc,seen}=await connectAcp(generation);
   try {
     const created=await rpc("session/new",{
