@@ -205,6 +205,10 @@ try {
   console.log("STAGING_CONTAINER_STARTED generation="+generation);
 
   await checkTerminal(generation);
+  // Separate a dead daemon/port from a WebSocket handshake/proxy failure.
+  const port=await internal("GET","acp-port-health",undefined,15_000);
+  console.log("STAGING_ACP_PORT_HEALTH",JSON.stringify(port));
+  if(!port.ready)throw new Error("ACP_DAEMON_PORT_UNREACHABLE");
   const {ws,rpc,seen}=await connectAcp(generation);
   try {
     const created=await rpc("session/new",{
