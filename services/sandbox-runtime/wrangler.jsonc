@@ -41,7 +41,8 @@
     "nodejs_compat"
   ],
   "vars": {
-    "CF_ACCOUNT_ID": "a22f860070e687304a08ce46118dadf6"
+    "CF_ACCOUNT_ID": "a22f860070e687304a08ce46118dadf6",
+    "GROKBOT_BOOT_DIAGNOSTICS": "1"
   },
   "ai": {
     "binding": "AI"
