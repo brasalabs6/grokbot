@@ -217,6 +217,10 @@ try {
     "console.log(process.env.GROK_AGENT_SECRET?'GROK_TOKEN_PRESENT':'GROK_TOKEN_MISSING')"
   ]});
   console.log("STAGING_AGENT_CONFIG",String(secretProbe.stdout||"").trim());
+  const daemonProbe=await internal("POST","exec",{argv:["node","-e",
+    "const f=require('node:fs');const p=f.readFileSync('/proc/1/cmdline','utf8');const e=f.readFileSync('/proc/1/environ','utf8');console.log('PID1_GROK='+p.includes('grok'));console.log('PID1_TOKEN='+e.includes('GROK_AGENT_SECRET='));console.log('PID1_SLEEP='+p.includes('sleep'));let c=[];for(const n of f.readdirSync('/proc').filter(x=>/^\\d+$/.test(x))){try{const v=f.readFileSync('/proc/'+n+'/comm','utf8').trim();if(v==='grok')c.push(n)}catch{}}console.log('GROK_PROCESS_COUNT='+c.length)"
+  ]});
+  console.log("STAGING_DAEMON_PROCESS",String(daemonProbe.stdout||"").trim().slice(0,240));
   // Separate a dead daemon/port from a WebSocket handshake/proxy failure.
   const port=await internal("GET","acp-port-health",undefined,15_000);
   console.log("STAGING_ACP_PORT_HEALTH",JSON.stringify(port));
