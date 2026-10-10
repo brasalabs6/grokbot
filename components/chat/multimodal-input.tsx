@@ -281,7 +281,11 @@ function PureMultimodalInput({
       );
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as {
+          url: string;
+          pathname: string;
+          contentType: string;
+        };
         const { url, pathname, contentType } = data;
 
         return {
@@ -290,7 +294,7 @@ function PureMultimodalInput({
           url,
         };
       }
-      const { error } = await response.json();
+      const { error } = (await response.json()) as { error: string };
       toast.error(error);
     } catch {
       toast.error("Failed to upload file, please try again!");
@@ -644,14 +648,17 @@ function PureAttachmentsButton({
   status: UseChatHelpers<ChatMessage>["status"];
   selectedModelId: string;
 }) {
-  const { data: modelsResponse } = useSWR(
+  const { data: modelsResponse } = useSWR<{
+    capabilities?: Record<string, ModelCapabilities>;
+    models?: ChatModel[];
+  }>(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
     { dedupingInterval: 3_600_000, revalidateOnFocus: false }
   );
 
   const caps: Record<string, ModelCapabilities> | undefined =
-    modelsResponse?.capabilities ?? modelsResponse;
+    modelsResponse?.capabilities;
   const hasVision = caps?.[selectedModelId]?.vision ?? false;
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -791,14 +798,17 @@ function PureModelSelectorCompact({
   onModelChange?: (modelId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { data: modelsData } = useSWR(
+  const { data: modelsData } = useSWR<{
+    capabilities?: Record<string, ModelCapabilities>;
+    models?: ChatModel[];
+  }>(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
     { dedupingInterval: 3_600_000, revalidateOnFocus: false }
   );
 
   const capabilities: Record<string, ModelCapabilities> | undefined =
-    modelsData?.capabilities ?? modelsData;
+    modelsData?.capabilities;
   const dynamicModels: ChatModel[] | undefined = modelsData?.models;
   const activeModels = dynamicModels ?? chatModels;
 

@@ -1,0 +1,50 @@
+name: GrokBot safe style autofix
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/grokbot-p00-acp-cloudflare-spike]
+permissions:
+  contents: write
+concurrency:
+  group: grokbot-safe-style-autofix
+  cancel-in-progress: false
+jobs:
+  format:
+    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[apply-formatter]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install with frozen lock
+        run: pnpm install --frozen-lockfile
+      - name: Apply Biome safe fixes and formatting only
+        run: |
+          pnpm exec biome check --write . || true
+          git diff --check
+          printf 'Changed files: '
+          git diff --name-only | wc -l
+      - name: Validate unit contracts and all TypeScript
+        run: |
+          pnpm exec tsx --test tests/unit/*.test.ts
+          pnpm exec tsc --noEmit --pretty false
+      - name: Commit only safe mechanical fixes to feature branch
+        run: |
+          if git diff --quiet; then
+            echo 'No changes'
+            exit 0
+          fi
+          git config user.name "grokbot-ci"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .
+          HUSKY=0 git commit -m "style: apply safe Biome fixes and formatting"
+          git push origin HEAD:feat/grokbot-p00-acp-cloudflare-spike

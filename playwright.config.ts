@@ -24,7 +24,7 @@ const baseURL = `http://localhost:${PORT}`;
  */
 export default defineConfig({
   expect: {
-    timeout: 240 * 1000,
+    timeout: 15 * 1000,
   },
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
@@ -78,7 +78,7 @@ export default defineConfig({
   testDir: "./tests",
 
   /* Configure global timeout for each test */
-  timeout: 240 * 1000, // 120 seconds
+  timeout: 60 * 1000, // fail fast on broken MVP flows
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */

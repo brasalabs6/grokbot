@@ -2,6 +2,7 @@ import { compare } from "bcrypt-ts";
 import NextAuth, { type DefaultSession } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
+import { isInternalEmailAllowed } from "@/lib/auth/access-policy";
 import { DUMMY_PASSWORD } from "@/lib/constants";
 import { createGuestUser, getUser } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
@@ -44,6 +45,13 @@ export const {
         token.type = user.type;
       }
 
+      // Invalidate existing JWTs when an operator revokes an allowlisted email.
+      if (
+        token.type === "regular" &&
+        !isInternalEmailAllowed(token.email ?? "")
+      ) {
+        return null;
+      }
       return token;
     },
     session({ session, token }) {
@@ -60,6 +68,10 @@ export const {
       async authorize(credentials) {
         const email = String(credentials.email ?? "");
         const password = String(credentials.password ?? "");
+        if (!isInternalEmailAllowed(email)) {
+          await compare(password, DUMMY_PASSWORD);
+          return null;
+        }
         const users = await getUser(email);
 
         if (users.length === 0) {
@@ -89,6 +101,9 @@ export const {
     }),
     Credentials({
       async authorize() {
+        if (process.env.GROKBOT_ENABLE_GUEST !== "1") {
+          return null;
+        }
         const [guestUser] = await createGuestUser();
         return { ...guestUser, type: "guest" };
       },

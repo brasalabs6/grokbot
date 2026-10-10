@@ -1,71 +1,52 @@
-<a href="https://chatbot.ai-sdk.dev/demo">
-  <img alt="Chatbot" src="app/(chat)/opengraph-image.png">
-  <h1 align="center">Chatbot</h1>
-</a>
+# GrokBot
 
-<p align="center">
-    Chatbot (formerly AI Chatbot) is a free, open-source template built with Next.js and the AI SDK that helps you quickly build powerful chatbot applications.
-</p>
+GrokBot is a Next.js control plane for running real **Grok Build coding agents** in isolated Cloudflare Containers. It connects to Grok over the Agent Client Protocol (ACP) and uses the operator's existing authenticated Brasamain OpenAI-compatible inference proxy.
 
-<p align="center">
-  <a href="https://chatbot.ai-sdk.dev/docs"><strong>Read Docs</strong></a> ·
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#model-providers"><strong>Model Providers</strong></a> ·
-  <a href="#deploy-your-own"><strong>Deploy Your Own</strong></a> ·
-  <a href="#running-locally"><strong>Running locally</strong></a>
-</p>
-<br/>
+> **Status: internal V1 preview / incomplete integration.** The Cloudflare agent runtime passed a real tool-execution smoke test, and a Vercel frontend build is online. This is **not yet a production-ready app**, because the independent PostgreSQL deployment and browser acceptance tests are still pending.
 
-## Features
+## System
 
-- [Next.js](https://nextjs.org) App Router
-  - Advanced routing for seamless navigation and performance
-  - React Server Components (RSCs) and Server Actions for server-side rendering and increased performance
-- [AI SDK](https://ai-sdk.dev/docs/introduction)
-  - Unified API for generating text, structured objects, and tool calls with LLMs
-  - Hooks for building dynamic chat and generative user interfaces
-  - Supports OpenAI, Anthropic, Google, xAI, and other model providers via AI Gateway
-- [shadcn/ui](https://ui.shadcn.com)
-  - Styling with [Tailwind CSS](https://tailwindcss.com)
-  - Component primitives from [Radix UI](https://radix-ui.com) for accessibility and flexibility
-- Data Persistence
-  - [Neon Serverless Postgres](https://vercel.com/marketplace/neon) for saving chat history and user data
-  - [Vercel Blob](https://vercel.com/storage/blob) for efficient file storage
-- [Auth.js](https://authjs.dev)
-  - Simple and secure authentication
+- **Web:** Next.js 16, React 19, Auth.js, dashboard, session detail, ACP chat, PTY terminal and read-only file explorer.
+- **Control plane:** authenticated REST endpoints and PostgreSQL/Drizzle state, operation idempotency and per-session access control.
+- **Runtime:** Cloudflare Worker + Durable Object + Sandbox/Container, pinned Grok Build CLI, generation-fenced sessions and WebSocket bridge.
+- **Inference:** `https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1`; default model `cf-qwen3.8-27b`. Real proxy credentials are secret bindings in the trusted Worker and are never stored in container images.
+- **Security:** signed expiring WebSocket tickets, signed exact-prompt run capabilities, narrow egress interception, no open terminal route, isolated workspaces.
 
-## Model Providers
+## Evidence
 
-This template uses the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) to access multiple AI models through a unified interface. Models are configured in `lib/ai/models.ts` with per-model provider routing. Included models: Mistral, Moonshot, DeepSeek, OpenAI, and xAI.
+The core coding-agent feasibility gate has **passed**. [GitHub Actions staging E2E](https://github.com/brasalabs6/grokbot/actions/runs/38017545630) confirms that Grok started in a Cloudflare Container, the Qwen proxy responded via HTTPS, Grok executed a tool and wrote a file, PTY/tmux reconnection worked, and the disposable sandbox was stopped.
 
-### AI Gateway Authentication
+For engineering evidence and implementation limitations see [E2E report](docs/EVIDENCE-STAGING-QWEN-2026-10-09.md), [status](docs/IMPLEMENTATION_STATUS_V1.md) and [proxy architecture decision](docs/ADR-002-PROXY-INFERENCE.md).
 
-**For Vercel deployments**: Authentication is handled automatically via OIDC tokens.
+## Source documents
 
-**For non-Vercel deployments**: You need to provide an AI Gateway API key by setting the `AI_GATEWAY_API_KEY` environment variable in your `.env.local` file.
-
-With the [AI SDK](https://ai-sdk.dev/docs/introduction), you can also switch to direct LLM providers like [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and [many more](https://ai-sdk.dev/providers/ai-sdk-providers) with just a few lines of code.
-
-## Deploy Your Own
-
-You can deploy your own version of Chatbot to Vercel with one click:
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/templates/next.js/chatbot)
+- [Full V1 specification](docs/FEATURE_SPEC_V1.md)
+- [Proxy decision ADR](docs/ADR-002-PROXY-INFERENCE.md)
+- [Staging E2E acceptance](docs/EVIDENCE-STAGING-QWEN-2026-10-09.md)
 
 ## Running locally
 
-You will need to use the environment variables [defined in `.env.example`](.env.example) to run Chatbot. It's recommended you use [Vercel Environment Variables](https://vercel.com/docs/projects/environment-variables) for this, but a `.env` file is all that is necessary.
-
-> Note: You should not commit your `.env` file or it will expose secrets that will allow others to control access to your various AI and authentication provider accounts.
-
-1. Install Vercel CLI: `npm i -g vercel`
-2. Link local instance with Vercel and GitHub accounts (creates `.vercel` directory): `vercel link`
-3. Download your environment variables: `vercel env pull`
+Requires Node.js 24, pnpm 10.32.1 and an **independent PostgreSQL** database. Copy `.env.example` to `.env.local` and configure values there. **Never commit your secrets.**
 
 ```bash
-pnpm install
-pnpm db:migrate # Setup database or apply latest database changes
+pnpm install --frozen-lockfile
+pnpm db:migrate
 pnpm dev
 ```
 
-Your app template should now be running on [localhost:3000](http://localhost:3000).
+The app needs `POSTGRES_URL`, `AUTH_SECRET`, `FEATURE_AGENT_RUNTIME=1`, `CLOUDFLARE_RUNTIME_URL`, `CONTROL_PLANE_SERVICE_SECRET`, and `RUNTIME_TICKET_SECRET` to provide complete agent sessions. Its Cloudflare sandbox Worker must have matching control-plane and signing credentials and the proxy API key as a Worker secret. The `FEATURE_AGENT_RUNTIME` flag remains off in preview until the backend is configured and tested.
+
+## Validation
+
+```bash
+pnpm exec tsc --noEmit
+pnpm exec tsx --test tests/unit/*.test.ts
+pnpm check
+pnpm exec playwright test
+```
+
+The Cloudflare runtime also has a dedicated CI suite in `.github/workflows/sandbox-runtime.yml` with an isolated Docker/ACP test; staging E2E runs only through the protected workflow `.github/workflows/staging-e2e.yml`. Never run those against production without deliberate environment scoping.
+
+## Deployment
+
+Vercel project `grokbot` is connected to the feature branch for protected preview deployments. The Cloudflare staging Worker is `grokbot-sandbox-runtime-staging`. No merge to `main` or production release should be performed until all application, database, recovery, test and security gates pass.

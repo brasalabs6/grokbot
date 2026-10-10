@@ -201,7 +201,13 @@ const PurePreviewMessage = ({
       if (state === "output-available") {
         return (
           <div className={widthClass} key={toolCallId}>
-            <Weather weatherAtLocation={part.output} />
+            <Weather
+              weatherAtLocation={
+                part.output as Parameters<
+                  typeof Weather
+                >[0]["weatherAtLocation"]
+              }
+            />
           </div>
         );
       }
