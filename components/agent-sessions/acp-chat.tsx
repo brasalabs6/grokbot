@@ -320,12 +320,16 @@ export function AcpChat({
                   break;
                 }
                 if (response.status !== 409) {
-                  const payload = (await response.json().catch(() => null)) as
-                    | { error?: { code?: string } }
-                    | null;
-                  throw new Error(payload?.error?.code ?? "ACP_RECONCILE_FAILED");
+                  const payload = (await response.json().catch(() => null)) as {
+                    error?: { code?: string };
+                  } | null;
+                  throw new Error(
+                    payload?.error?.code ?? "ACP_RECONCILE_FAILED"
+                  );
                 }
-                await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 400 * (attempt + 1))
+                );
               }
               if (!confirmed) {
                 throw new Error("ACP_RECONCILIATION_PENDING");

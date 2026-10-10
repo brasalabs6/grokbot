@@ -7,8 +7,11 @@ import "./globals.css";
 import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
-  description: "GrokBot — isolated coding agents powered by Grok Build and Cloudflare.",
-  metadataBase: new URL("https://grokbot-guicorinthias-gmailcoms-projects.vercel.app"),
+  description:
+    "GrokBot — isolated coding agents powered by Grok Build and Cloudflare.",
+  metadataBase: new URL(
+    "https://grokbot-guicorinthias-gmailcoms-projects.vercel.app"
+  ),
   title: "GrokBot — Coding agents",
 };
 

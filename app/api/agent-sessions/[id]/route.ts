@@ -37,7 +37,10 @@ export async function PATCH(request: Request, { params }: Params) {
     return Response.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
   }
   if (request.headers.get("Origin") !== new URL(request.url).origin) {
-    return Response.json({ error: { code: "INVALID_ORIGIN" } }, { status: 403 });
+    return Response.json(
+      { error: { code: "INVALID_ORIGIN" } },
+      { status: 403 }
+    );
   }
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) {

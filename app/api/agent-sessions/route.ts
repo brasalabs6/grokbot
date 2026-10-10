@@ -20,10 +20,16 @@ export async function POST(request: Request) {
     return Response.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
   }
   if (request.headers.get("Origin") !== new URL(request.url).origin) {
-    return Response.json({ error: { code: "INVALID_ORIGIN" } }, { status: 403 });
+    return Response.json(
+      { error: { code: "INVALID_ORIGIN" } },
+      { status: 403 }
+    );
   }
   if (process.env.FEATURE_AGENT_RUNTIME !== "1") {
-    return Response.json({ error: { code: "RUNTIME_DISABLED" } }, { status: 503 });
+    return Response.json(
+      { error: { code: "RUNTIME_DISABLED" } },
+      { status: 503 }
+    );
   }
   await checkIpRateLimit(ipAddress(request));
   const raw = await request.json().catch(() => null);

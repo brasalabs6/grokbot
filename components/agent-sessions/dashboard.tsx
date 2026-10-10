@@ -85,9 +85,9 @@ export function AgentSessionsDashboard({
           <label className="grid gap-1 text-sm">
             Grok model (existing Brasamain proxy)
             <Input
-              readOnly
               aria-label="CF Qwen 3.8 27B (tested model)"
               placeholder="cf-qwen3.8-27b"
+              readOnly
               value={model}
             />
           </label>

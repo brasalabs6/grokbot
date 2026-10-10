@@ -2,9 +2,8 @@
 
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-
-import { createUser, getUser } from "@/lib/db/queries";
 import { isInternalEmailAllowed } from "@/lib/auth/access-policy";
+import { createUser, getUser } from "@/lib/db/queries";
 
 import { signIn } from "./auth";
 
@@ -65,8 +64,8 @@ export const register = async (
   try {
     const validatedData = registrationSchema.parse({
       email: formData.get("email"),
-      password: formData.get("password"),
       inviteCode: formData.get("inviteCode"),
+      password: formData.get("password"),
     });
 
     const configuredCode = process.env.GROKBOT_SIGNUP_KEY;
