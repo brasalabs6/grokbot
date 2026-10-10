@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { isDevelopmentEnvironment } from "./lib/constants";
+import { isInternalEmailAllowed } from "./lib/auth/access-policy";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -21,14 +22,17 @@ export async function proxy(request: NextRequest) {
     secureCookie: !isDevelopmentEnvironment,
   });
 
+  const authorizedRegular =
+    token?.type === "regular" && isInternalEmailAllowed(token.email ?? "");
+
   if (pathname === "/login" || pathname === "/register") {
-    if (token?.type === "regular") {
+    if (authorizedRegular) {
       return NextResponse.redirect(new URL("/agent-sessions", request.url));
     }
     return NextResponse.next();
   }
 
-  if (!token || token.type === "guest") {
+  if (!authorizedRegular) {
     // APIs must return their own JSON 401/403, not a guest sign-in redirect.
     if (pathname.startsWith("/api/")) {
       return NextResponse.next();
