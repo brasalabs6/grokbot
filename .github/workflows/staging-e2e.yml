@@ -19,6 +19,7 @@ jobs:
       CLOUDFLARE_RUNTIME_URL: https://grokbot-sandbox-runtime-staging.guibelongtovi-a22.workers.dev/
       CONTROL_PLANE_SERVICE_SECRET: ${{ secrets.CONTROL_PLANE_SERVICE_SECRET }}
       RUNTIME_TICKET_SECRET: ${{ secrets.RUNTIME_TICKET_SECRET }}
+      STAGING_TEST_RESTORE: '1'
     steps:
       - uses: actions/checkout@v4
         with:
