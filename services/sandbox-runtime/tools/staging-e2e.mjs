@@ -231,7 +231,13 @@ try {
     await new Promise(resolve=>setTimeout(resolve,1000));
   }
   console.log("STAGING_ACP_PORT_HEALTH",JSON.stringify(port));
-  if(!port?.ready)throw new Error("ACP_DAEMON_PORT_UNREACHABLE_AFTER_45S");
+  if(!port?.ready) {
+    const diagnostic = await internal("POST","exec",{argv:["node","-e",
+      "const f=require('node:fs');let log='';try{log=f.readFileSync('/tmp/grokbot-boot-diagnostics.log','utf8')}catch{}let secret='';try{secret=f.readFileSync('/proc/1/environ','utf8').split('\\0').find(x=>x.startsWith('GROK_AGENT_SECRET='))?.slice(18)||''}catch{}for(const line of log.split('\\n').filter(x=>/error|warn|fail|network|tls|auth|connect|listen|model|startup/i.test(x)).slice(-12)){let safe=secret?line.replaceAll(secret,'[REDACTED]'):line;safe=safe.replace(/server-key[^\\s]*/ig,'server-key=[REDACTED]');console.log(safe.slice(0,220))}if(!log)console.log('NO_BOOT_LOG')"
+    ]});
+    console.log("STAGING_DAEMON_DIAGNOSTICS",String(diagnostic.stdout||"").slice(0,1700));
+    throw new Error("ACP_DAEMON_PORT_UNREACHABLE_AFTER_45S");
+  }
   const {ws,rpc,seen}=await connectAcp(generation);
   try {
     const created=await rpc("session/new",{
