@@ -50,6 +50,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build Grok runtime image
         run: docker build --tag grokbot-acp-test --progress=plain -f services/sandbox-runtime/Dockerfile services/sandbox-runtime
+      - name: Verify proxy model profiles and credential boundaries
+        run: node services/sandbox-runtime/tools/verify-proxy-models.mjs
       - name: Check ACP probe syntax
         run: node --check services/sandbox-runtime/tools/acp-smoke.mjs
       - name: Check remote staging E2E syntax
