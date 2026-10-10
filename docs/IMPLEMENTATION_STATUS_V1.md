@@ -2,6 +2,33 @@
 
 Last updated: 2026-10-09. **Work in progress; no production release.**
 
+## Latest implementation checkpoint — October 10, 2026
+
+**This feature branch remains staging-only and is not 100% ready for internal users.**
+
+- Internal login no longer auto-creates a guest row. Allowlists, private
+  signup invitation codes and default-deny guest access were added.
+- Vercel preview `/login` returned HTTP 200 after the guest-auth fix.
+- Production builds no longer execute database migrations; explicit
+  `pnpm db:migrate` passes against a disposable PostgreSQL 17 service in CI.
+- CI browser tests now validate the GrokBot dashboard instead of the abandoned
+  legacy chatbot tests, with isolated test-only credentials and PostgreSQL.
+- Owner-only, idempotent STOP/checkpoint, read-only STOP reconciliation and
+  STOPPED -> RESUMING lifecycle were implemented with generation fencing.
+  These new lifecycle changes still require live Cloudflare acceptance.
+- Restoring a container snapshot now explicitly includes the Cloudflare
+  outbound proxy CA path. Container snapshots are **not** verified R2 backups.
+- The latest style autofix workflow passed full TypeScript and unit checks at
+  [run 38070784781](https://github.com/brasalabs6/grokbot/actions/runs/38070784781)
+  before the new STOP implementation; new code awaits equivalent verification.
+
+**Blocking full deployment:** a dedicated GrokBot PostgreSQL deployment and
+database approval, paired Cloudflare/Vercel control-plane secrets, runtime flag
+activation, end-to-end browser-agent-terminal-workspace tests, durable R2
+backup/restore, recovery and threat-model acceptance, and strict lint cleanup.
+Do not merge to `main`, promote to production or claim a functional release
+until these gates have independent evidence.
+
 ## Latest verified milestone
 
 **PASS: live staging Grok + Qwen inference proxy + real coding-agent tools + PTY/tmux.** GitHub Actions run [38017545630](https://github.com/brasalabs6/grokbot/actions/runs/38017545630) completed successfully in 23 seconds. The model request returned HTTP 200; the agent created a uniquely marked workspace file and the test verified its contents. Sandbox cleanup passed. Evidence: [EVIDENCE-STAGING-QWEN-2026-10-09.md](EVIDENCE-STAGING-QWEN-2026-10-09.md).
