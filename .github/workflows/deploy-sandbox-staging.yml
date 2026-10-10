@@ -18,6 +18,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      GROKBOT_PROXY_API_KEY: ${{ secrets.GROKBOT_PROXY_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,12 +33,18 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing staging secret: CLOUDFLARE_API_TOKEN'; exit 1; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'Missing staging variable: CLOUDFLARE_ACCOUNT_ID'; exit 1; }
+          test -n "$GROKBOT_PROXY_API_KEY" || { echo 'Missing staging secret: GROKBOT_PROXY_API_KEY'; exit 1; }
       - name: Install runtime dependencies
         working-directory: services/sandbox-runtime
         run: pnpm install --frozen-lockfile
       - name: Verify type contracts
         working-directory: services/sandbox-runtime
         run: pnpm check
+      - name: Install existing proxy credential into Cloudflare staging Worker
+        working-directory: services/sandbox-runtime
+        run: |
+          # Feed through stdin. Never echo token or place it on the command line.
+          printf '%s' "$GROKBOT_PROXY_API_KEY" | pnpm exec wrangler secret put GROKBOT_PROXY_API_KEY
       - name: Deploy Cloudflare Worker and container image
         working-directory: services/sandbox-runtime
         run: pnpm exec wrangler deploy
