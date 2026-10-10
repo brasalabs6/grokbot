@@ -45,6 +45,10 @@ export const {
         token.type = user.type;
       }
 
+      // Invalidate existing JWTs when an operator revokes an allowlisted email.
+      if (token.type === "regular" && !isInternalEmailAllowed(token.email ?? "")) {
+        return null;
+      }
       return token;
     },
     session({ session, token }) {
@@ -94,6 +98,9 @@ export const {
     }),
     Credentials({
       async authorize() {
+        if (process.env.GROKBOT_ENABLE_GUEST !== "1") {
+          return null;
+        }
         const [guestUser] = await createGuestUser();
         return { ...guestUser, type: "guest" };
       },
