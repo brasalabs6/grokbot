@@ -13,7 +13,7 @@ async function geocodeCity(
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { results?: { latitude: number; longitude: number }[] };
 
     if (!data.results || data.results.length === 0) {
       return null;
@@ -59,7 +59,7 @@ export const getWeather = tool({
       `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m&hourly=temperature_2m&daily=sunrise,sunset&timezone=auto`
     );
 
-    const weatherData = await response.json();
+    const weatherData = (await response.json()) as Record<string, unknown>;
 
     if ("city" in input) {
       weatherData.cityName = input.city;
