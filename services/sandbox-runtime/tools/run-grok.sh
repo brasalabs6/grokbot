@@ -19,7 +19,7 @@ fi
 
 if [ "${GROKBOT_BOOT_DIAGNOSTICS:-0}" = "1" ]; then
   umask 077
-  exec grok --no-auto-update agent --no-leader --model cf-gpt-oss serve --bind 0.0.0.0:2419 \
+  exec grok --no-auto-update agent --no-leader --model cf-qwen3.8-27b serve --bind 0.0.0.0:2419 \
     >/tmp/grokbot-boot-diagnostics.log 2>&1
 fi
-exec grok --no-auto-update agent --no-leader --model cf-gpt-oss serve --bind 0.0.0.0:2419 >/dev/null 2>&1
+exec grok --no-auto-update agent --no-leader --model cf-qwen3.8-27b serve --bind 0.0.0.0:2419 >/dev/null 2>&1
