@@ -30,6 +30,7 @@ export function SessionDetail({
   const [panel, setPanel] = useState<Panel>("chat");
   const [startBusy, setStartBusy] = useState(false);
   const [stopBusy, setStopBusy] = useState(false);
+  const [pendingStopOperation, setPendingStopOperation] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [currentState, setCurrentState] = useState(initialState);
   useEffect(() => {
@@ -40,6 +41,8 @@ export function SessionDetail({
     if (!window.confirm("Stop this sandbox after taking a checkpoint? Run only when there is no active agent task.")) {
       return;
     }
+    const operationId = crypto.randomUUID();
+    setPendingStopOperation(operationId);
     setStopBusy(true);
     setStartError(null);
     try {
@@ -48,7 +51,7 @@ export function SessionDetail({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           expectedSessionVersion: stateVersion,
-          operationId: crypto.randomUUID(),
+          operationId,
           checkpoint: true,
         }),
       });
@@ -60,6 +63,7 @@ export function SessionDetail({
         throw new Error(payload.error?.code ?? "STOP_OUTCOME_UNKNOWN");
       }
       setCurrentState(payload.state ?? "STOPPED");
+      setPendingStopOperation(null);
       router.refresh();
     } catch (e) {
       setStartError(e instanceof Error ? e.message : "Stop outcome unknown");
@@ -68,6 +72,31 @@ export function SessionDetail({
       setStopBusy(false);
     }
   }
+  async function reconcileStop() {
+    if (!pendingStopOperation) return;
+    setStopBusy(true);
+    setStartError(null);
+    try {
+      const response = await fetch(`/api/agent-sessions/${id}/stop/reconcile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operationId: pendingStopOperation }),
+      });
+      const result = (await response.json()) as {
+        state?: string;
+        error?: { code?: string };
+      };
+      if (!response.ok) throw new Error(result.error?.code ?? "STOP_NOT_CONFIRMED");
+      setCurrentState(result.state ?? "STOPPED");
+      setPendingStopOperation(null);
+      router.refresh();
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : "Stop not confirmed");
+    } finally {
+      setStopBusy(false);
+    }
+  }
+
   async function startContainer() {
     setStartBusy(true);
     setStartError(null);
@@ -162,7 +191,12 @@ export function SessionDetail({
           <p className="text-xs text-muted-foreground">
             Session {id} · {modelId} · Generation {generation} · {currentState}
           </p>
-          {["READY", "IDLE", "DEGRADED"].includes(currentState) && (
+          {pendingStopOperation && (
+            <Button disabled={stopBusy} onClick={() => void reconcileStop()} size="sm" variant="outline">
+              Verify stop outcome
+            </Button>
+          )}
+          {["READY", "IDLE", "DEGRADED"].includes(currentState) && !pendingStopOperation && (
             <Button
               disabled={stopBusy || startBusy}
               onClick={() => void stopContainer()}
@@ -173,6 +207,7 @@ export function SessionDetail({
             </Button>
           )}
         </div>
+        {startError && <p className="mb-3 text-sm text-red-500" role="alert">{startError}</p>}
         {panel === "chat" && (
           <>
             {["CREATED", "STOPPED", "SUSPENDED"].includes(currentState) && (
@@ -193,11 +228,6 @@ export function SessionDetail({
                       ? "Provision Cloudflare sandbox"
                       : "Resume Cloudflare sandbox"}
                 </Button>
-                {startError && (
-                  <p className="mt-3 text-sm text-red-500" role="alert">
-                    {startError}
-                  </p>
-                )}
               </div>
             )}
             <AcpChat
