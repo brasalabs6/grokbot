@@ -16,6 +16,7 @@ jobs:
       AUTH_TRUST_HOST: "true"
       POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/grokbot_test
       GROKBOT_ALLOWED_EMAILS: internal-test@example.test
+      GROKBOT_SIGNUP_KEY: ci-only-registration-code-32-chars-long
       FEATURE_AGENT_RUNTIME: "0"
     services:
       postgres:
