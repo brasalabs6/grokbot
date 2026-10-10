@@ -101,10 +101,10 @@ export class SessionSandbox extends DurableObject<Env> {
       if (container.running) {
         return { ...(await this.status()), idempotent: true };
       }
-      // Inference credentials stay in trusted Worker code, outside the sandbox.
-      // All other outbound connections are blocked by enableInternet:false.
+      // Only the existing authenticated Brasamain proxy can receive outbound
+      // HTTPS traffic. The real proxy key remains in Worker secrets.
       await container.interceptOutboundHttps(
-        "api.cloudflare.com",
+        "cf-ai-rate-proxy.brasaimainstream.workers.dev",
         this.ctx.exports.WorkersAIGateway({ props: {} })
       );
       let agentSecret=await this.ctx.storage.get<string>("grokAgentSecret");
