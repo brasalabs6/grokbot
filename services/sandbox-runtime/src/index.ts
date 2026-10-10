@@ -6,6 +6,7 @@ import {verifyRunPermit,promptHash} from "./run-permit";
 
 interface Env {
   APP_ORIGIN?: string;
+  GROKBOT_BOOT_DIAGNOSTICS?: string;
   CONTROL_PLANE_SERVICE_SECRET: string;
   RUNTIME_TICKET_SECRET: string;
   SANDBOXES: DurableObjectNamespace<SessionSandbox>;
@@ -112,10 +113,12 @@ export class SessionSandbox extends DurableObject<Env> {
         await this.ctx.storage.put("grokAgentSecret",agentSecret);
       }
       const snapshotId = await this.ctx.storage.get<string>("snapshotId");
+      const diagnosticEnv=this.env.GROKBOT_BOOT_DIAGNOSTICS==="1"
+        ? {GROKBOT_BOOT_DIAGNOSTICS:"1"} : {};
       container.start(
         snapshotId
           ? { containerSnapshot: { id: snapshotId }, instance:"standard-1", enableInternet: false,
-              env: {GROK_AGENT_SECRET: agentSecret}
+              env: {GROK_AGENT_SECRET: agentSecret,...diagnosticEnv}
             }
           : {
               enableInternet: false,
@@ -123,7 +126,8 @@ export class SessionSandbox extends DurableObject<Env> {
               instance: "standard-1",
               env: {
                 NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
-                GROK_AGENT_SECRET:agentSecret
+                GROK_AGENT_SECRET:agentSecret,
+                ...diagnosticEnv
               }
             }
       );
