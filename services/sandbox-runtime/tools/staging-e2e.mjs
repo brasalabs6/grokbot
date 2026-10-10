@@ -252,10 +252,10 @@ try {
   // Isolate the Workers AI HTTPS interception from the Grok agent's ACP layer.
   // No Cloudflare API token is provided to the sandbox.
   const inferenceCode=[
-    "const u='https://api.cloudflare.com/client/v4/accounts/a22f860070e687304a08ce46118dadf6/ai/v1/chat/completions';",
+    "const u='https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1/chat/completions';",
     "console.log('TLS_CA_PRESENT_'+require('node:fs').existsSync('/etc/cloudflare/certs/cloudflare-containers-ca.crt'));",
     "fetch(u,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer grokbot-internal-placeholder'},",
-    "body:JSON.stringify({model:'@cf/openai/gpt-oss-120b',messages:[{role:'user',content:'Reply only OK'}],max_tokens:32,stream:false}),",
+    "body:JSON.stringify({model:'@cf/qwen/qwen3.8-27b',messages:[{role:'user',content:'Reply only OK'}],max_tokens:32,stream:false}),",
     "signal:AbortSignal.timeout(45000)}).then(async r=>{let j=await r.json();",
     "console.log(JSON.stringify({status:r.status,keys:Object.keys(j),choices:Array.isArray(j.choices),",
     "contentType:r.headers.get('content-type'),errorCode:j.error?.code||null}));",
