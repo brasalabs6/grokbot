@@ -827,7 +827,8 @@ export async function markStopOutcomeUnknown(
       and(
         eq(agentOperation.sessionId, sessionId),
         eq(agentOperation.id, operationId),
-        eq(agentOperation.kind, "STOP")
+        eq(agentOperation.kind, "STOP"),
+        eq(agentOperation.state, "EXECUTING")
       )
     );
 }
