@@ -474,7 +474,7 @@ export async function claimStartOperation(args: {
     if (session.stateVersion !== args.expectedVersion) {
       throw new AgentConflict("VERSION_CONFLICT");
     }
-    if (session.state !== "CREATED") {
+    if (!["CREATED", "STOPPED", "SUSPENDED"].includes(session.state)) {
       throw new AgentConflict("SESSION_NOT_READY");
     }
     const [operation] = await tx
@@ -492,7 +492,7 @@ export async function claimStartOperation(args: {
     const [updated] = await tx
       .update(agentSession)
       .set({
-        state: "PROVISIONING",
+        state: session.state === "CREATED" ? "PROVISIONING" : "RESUMING",
         stateVersion: session.stateVersion + 1,
         updatedAt: new Date(),
       })
