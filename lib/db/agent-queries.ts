@@ -677,3 +677,157 @@ export async function reconcileCompletedAgentRun(args: {
     return { idempotent: false, run: updatedRun, session: updatedSession };
   });
 }
+
+
+/**
+ * STOP is accepted transactionally and never aborts an active coding run.
+ * Replays of the same operation ID must not re-dispatch a stop to Cloudflare.
+ */
+export async function claimStopOperation(args: {
+  sessionId: string;
+  ownerId: string;
+  operationId: string;
+  expectedVersion: number;
+}) {
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(agentSession)
+      .where(
+        and(
+          eq(agentSession.id, args.sessionId),
+          eq(agentSession.ownerId, args.ownerId),
+          isNull(agentSession.deletedAt)
+        )
+      )
+      .for("update");
+    if (!session) return null;
+    const [previous] = await tx
+      .select()
+      .from(agentOperation)
+      .where(
+        and(
+          eq(agentOperation.sessionId, args.sessionId),
+          eq(agentOperation.kind, "STOP"),
+          eq(agentOperation.idempotencyKey, args.operationId)
+        )
+      )
+      .limit(1);
+    if (previous) return { claimed: false, operation: previous, session };
+    if (session.stateVersion !== args.expectedVersion) {
+      throw new AgentConflict("VERSION_CONFLICT");
+    }
+    if (
+      session.currentRunId ||
+      !["READY", "IDLE", "DEGRADED", "PROVISIONING"].includes(session.state) ||
+      session.generation < 1
+    ) {
+      throw new AgentConflict(
+        session.currentRunId ? "RUN_ALREADY_ACTIVE" : "SESSION_NOT_READY"
+      );
+    }
+    const [operation] = await tx
+      .insert(agentOperation)
+      .values({
+        expectedVersion: session.stateVersion,
+        generation: session.generation,
+        id: args.operationId,
+        idempotencyKey: args.operationId,
+        kind: "STOP",
+        sessionId: session.id,
+        state: "EXECUTING",
+      })
+      .returning();
+    const [updated] = await tx
+      .update(agentSession)
+      .set({
+        state: "STOPPING",
+        stateVersion: session.stateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSession.id, session.id))
+      .returning();
+    return { claimed: true, operation, session: updated };
+  });
+}
+
+/** Finalize only after the matching DO reports the sandbox stopped. */
+export async function confirmStoppedSandbox(args: {
+  sessionId: string;
+  ownerId: string;
+  operationId: string;
+  generation: number;
+  snapshotId?: string | null;
+}) {
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(agentSession)
+      .where(
+        and(
+          eq(agentSession.id, args.sessionId),
+          eq(agentSession.ownerId, args.ownerId),
+          isNull(agentSession.deletedAt)
+        )
+      )
+      .for("update");
+    if (!session) return null;
+    if (session.generation !== args.generation) {
+      throw new AgentConflict("GENERATION_CONFLICT");
+    }
+    const [operation] = await tx
+      .select()
+      .from(agentOperation)
+      .where(
+        and(
+          eq(agentOperation.id, args.operationId),
+          eq(agentOperation.sessionId, args.sessionId),
+          eq(agentOperation.kind, "STOP")
+        )
+      )
+      .limit(1);
+    if (!operation || operation.generation !== args.generation) {
+      throw new AgentConflict("VERSION_CONFLICT");
+    }
+    if (session.state === "STOPPED" && operation.state === "SUCCEEDED") {
+      return session;
+    }
+    if (session.state !== "STOPPING" || session.currentRunId) {
+      throw new AgentConflict("SESSION_NOT_READY");
+    }
+    const [updated] = await tx
+      .update(agentSession)
+      .set({
+        state: "STOPPED",
+        stateVersion: session.stateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSession.id, session.id))
+      .returning();
+    await tx
+      .update(agentSandbox)
+      .set({ state: "STOPPED", generation: args.generation })
+      .where(eq(agentSandbox.sessionId, session.id));
+    await tx
+      .update(agentOperation)
+      .set({ state: "SUCCEEDED", finishedAt: new Date() })
+      .where(eq(agentOperation.id, operation.id));
+    return updated;
+  });
+}
+
+export async function markStopOutcomeUnknown(
+  sessionId: string,
+  operationId: string
+) {
+  await db
+    .update(agentOperation)
+    .set({ state: "OUTCOME_UNKNOWN" })
+    .where(
+      and(
+        eq(agentOperation.sessionId, sessionId),
+        eq(agentOperation.id, operationId),
+        eq(agentOperation.kind, "STOP")
+      )
+    );
+}
