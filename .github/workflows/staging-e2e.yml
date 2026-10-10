@@ -31,7 +31,7 @@ jobs:
           test -n "$CONTROL_PLANE_SERVICE_SECRET" || { echo 'Missing staging secret CONTROL_PLANE_SERVICE_SECRET'; exit 1; }
           test -n "$RUNTIME_TICKET_SECRET" || { echo 'Missing staging secret RUNTIME_TICKET_SECRET'; exit 1; }
       - name: Confirm staging health
-        run: curl --fail --silent --show-error --max-time 20 "$CLOUDFLARE_RUNTIME_URL/health"
+        run: curl --fail --silent --show-error --max-time 20 "${CLOUDFLARE_RUNTIME_URL%/}/health"
       - name: Check smoke script syntax
         run: node --check services/sandbox-runtime/tools/staging-e2e.mjs
       - name: Execute disposable Grok ACP, Workers AI and tool-calling E2E
