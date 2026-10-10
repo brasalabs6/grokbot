@@ -678,7 +678,6 @@ export async function reconcileCompletedAgentRun(args: {
   });
 }
 
-
 /**
  * STOP is accepted transactionally and never aborts an active coding run.
  * Replays of the same operation ID must not re-dispatch a stop to Cloudflare.
@@ -701,7 +700,9 @@ export async function claimStopOperation(args: {
         )
       )
       .for("update");
-    if (!session) return null;
+    if (!session) {
+      return null;
+    }
     const [previous] = await tx
       .select()
       .from(agentOperation)
@@ -713,7 +714,9 @@ export async function claimStopOperation(args: {
         )
       )
       .limit(1);
-    if (previous) return { claimed: false, operation: previous, session };
+    if (previous) {
+      return { claimed: false, operation: previous, session };
+    }
     if (session.stateVersion !== args.expectedVersion) {
       throw new AgentConflict("VERSION_CONFLICT");
     }
@@ -771,7 +774,9 @@ export async function confirmStoppedSandbox(args: {
         )
       )
       .for("update");
-    if (!session) return null;
+    if (!session) {
+      return null;
+    }
     if (session.generation !== args.generation) {
       throw new AgentConflict("GENERATION_CONFLICT");
     }
@@ -806,11 +811,11 @@ export async function confirmStoppedSandbox(args: {
       .returning();
     await tx
       .update(agentSandbox)
-      .set({ state: "STOPPED", generation: args.generation })
+      .set({ generation: args.generation, state: "STOPPED" })
       .where(eq(agentSandbox.sessionId, session.id));
     await tx
       .update(agentOperation)
-      .set({ state: "SUCCEEDED", finishedAt: new Date() })
+      .set({ finishedAt: new Date(), state: "SUCCEEDED" })
       .where(eq(agentOperation.id, operation.id));
     return updated;
   });

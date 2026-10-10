@@ -11,9 +11,9 @@ import {
 type Params = { params: Promise<{ id: string }> };
 const inputSchema = z
   .object({
+    checkpoint: z.boolean().default(true),
     expectedSessionVersion: z.number().int().positive(),
     operationId: z.uuid(),
-    checkpoint: z.boolean().default(true),
   })
   .strict();
 
@@ -92,10 +92,10 @@ export async function POST(request: Request, { params }: Params) {
       snapshotId: stopped.snapshotId,
     });
     return Response.json({
+      operationId: parsed.data.operationId,
+      snapshotId: stopped.snapshotId ?? null,
       state: updated?.state,
       stateVersion: updated?.stateVersion,
-      snapshotId: stopped.snapshotId ?? null,
-      operationId: parsed.data.operationId,
     });
   } catch (error) {
     // Remote timeout may mean the stop succeeded. Do not dispatch another

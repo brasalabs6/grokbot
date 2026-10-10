@@ -30,7 +30,9 @@ export function SessionDetail({
   const [panel, setPanel] = useState<Panel>("chat");
   const [startBusy, setStartBusy] = useState(false);
   const [stopBusy, setStopBusy] = useState(false);
-  const [pendingStopOperation, setPendingStopOperation] = useState<string | null>(null);
+  const [pendingStopOperation, setPendingStopOperation] = useState<
+    string | null
+  >(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [currentState, setCurrentState] = useState(initialState);
   useEffect(() => {
@@ -38,7 +40,11 @@ export function SessionDetail({
   }, [initialState]);
 
   async function stopContainer() {
-    if (!window.confirm("Stop this sandbox after taking a checkpoint? Run only when there is no active agent task.")) {
+    if (
+      !window.confirm(
+        "Stop this sandbox after taking a checkpoint? Run only when there is no active agent task."
+      )
+    ) {
       return;
     }
     const operationId = crypto.randomUUID();
@@ -47,13 +53,13 @@ export function SessionDetail({
     setStartError(null);
     try {
       const response = await fetch(`/api/agent-sessions/${id}/stop`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          checkpoint: true,
           expectedSessionVersion: stateVersion,
           operationId,
-          checkpoint: true,
         }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
       const payload = (await response.json()) as {
         state?: string;
@@ -73,20 +79,24 @@ export function SessionDetail({
     }
   }
   async function reconcileStop() {
-    if (!pendingStopOperation) return;
+    if (!pendingStopOperation) {
+      return;
+    }
     setStopBusy(true);
     setStartError(null);
     try {
       const response = await fetch(`/api/agent-sessions/${id}/stop/reconcile`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ operationId: pendingStopOperation }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
       const result = (await response.json()) as {
         state?: string;
         error?: { code?: string };
       };
-      if (!response.ok) throw new Error(result.error?.code ?? "STOP_NOT_CONFIRMED");
+      if (!response.ok) {
+        throw new Error(result.error?.code ?? "STOP_NOT_CONFIRMED");
+      }
       setCurrentState(result.state ?? "STOPPED");
       setPendingStopOperation(null);
       router.refresh();
@@ -192,22 +202,32 @@ export function SessionDetail({
             Session {id} · {modelId} · Generation {generation} · {currentState}
           </p>
           {pendingStopOperation && (
-            <Button disabled={stopBusy} onClick={() => void reconcileStop()} size="sm" variant="outline">
-              Verify stop outcome
-            </Button>
-          )}
-          {["READY", "IDLE", "DEGRADED"].includes(currentState) && !pendingStopOperation && (
             <Button
-              disabled={stopBusy || startBusy}
-              onClick={() => void stopContainer()}
+              disabled={stopBusy}
+              onClick={() => void reconcileStop()}
               size="sm"
               variant="outline"
             >
-              {stopBusy ? "Stopping…" : "Stop and checkpoint"}
+              Verify stop outcome
             </Button>
           )}
+          {["READY", "IDLE", "DEGRADED"].includes(currentState) &&
+            !pendingStopOperation && (
+              <Button
+                disabled={stopBusy || startBusy}
+                onClick={() => void stopContainer()}
+                size="sm"
+                variant="outline"
+              >
+                {stopBusy ? "Stopping…" : "Stop and checkpoint"}
+              </Button>
+            )}
         </div>
-        {startError && <p className="mb-3 text-sm text-red-500" role="alert">{startError}</p>}
+        {startError && (
+          <p className="mb-3 text-sm text-red-500" role="alert">
+            {startError}
+          </p>
+        )}
         {panel === "chat" && (
           <>
             {["CREATED", "STOPPED", "SUSPENDED"].includes(currentState) && (

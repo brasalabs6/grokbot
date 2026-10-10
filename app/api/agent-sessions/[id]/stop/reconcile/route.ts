@@ -17,10 +17,16 @@ export async function POST(request: Request, { params }: Params) {
     return Response.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
   }
   if (process.env.FEATURE_AGENT_RUNTIME !== "1") {
-    return Response.json({ error: { code: "RUNTIME_DISABLED" } }, { status: 503 });
+    return Response.json(
+      { error: { code: "RUNTIME_DISABLED" } },
+      { status: 503 }
+    );
   }
   if (request.headers.get("Origin") !== new URL(request.url).origin) {
-    return Response.json({ error: { code: "INVALID_ORIGIN" } }, { status: 403 });
+    return Response.json(
+      { error: { code: "INVALID_ORIGIN" } },
+      { status: 403 }
+    );
   }
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) {
@@ -28,7 +34,10 @@ export async function POST(request: Request, { params }: Params) {
   }
   const input = inputSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
-    return Response.json({ error: { code: "VALIDATION_ERROR" } }, { status: 400 });
+    return Response.json(
+      { error: { code: "VALIDATION_ERROR" } },
+      { status: 400 }
+    );
   }
   const owned = await getAgentSession(id, user.user.id);
   if (!owned) {
@@ -56,10 +65,10 @@ export async function POST(request: Request, { params }: Params) {
       snapshotId: remote.snapshotId,
     });
     return Response.json({
+      operationId: input.data.operationId,
+      snapshotId: remote.snapshotId ?? null,
       state: updated?.state,
       stateVersion: updated?.stateVersion,
-      snapshotId: remote.snapshotId ?? null,
-      operationId: input.data.operationId,
     });
   } catch (error) {
     return Response.json(
