@@ -25,6 +25,8 @@ export default function Page() {
   useEffect(() => {
     if (state.status === "user_exists") {
       toast({ description: "Account already exists!", type: "error" });
+    } else if (state.status === "not_allowed") {
+      toast({ description: "Registration is restricted to authorized internal accounts.", type: "error" });
     } else if (state.status === "failed") {
       toast({ description: "Failed to create account!", type: "error" });
     } else if (state.status === "invalid_data") {
@@ -48,7 +50,7 @@ export default function Page() {
   return (
     <>
       <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
-      <p className="text-sm text-muted-foreground">Get started for free</p>
+      <p className="text-sm text-muted-foreground">Internal access requires an invitation</p>
       <AuthForm action={handleSubmit} defaultEmail={email}>
         <SubmitButton isSuccessful={isSuccessful}>Sign up</SubmitButton>
         <p className="text-center text-[13px] text-muted-foreground">
