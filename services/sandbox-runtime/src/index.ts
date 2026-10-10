@@ -118,7 +118,7 @@ export class SessionSandbox extends DurableObject<Env> {
       container.start(
         snapshotId
           ? { containerSnapshot: { id: snapshotId }, instance:"standard-1", enableInternet: false,
-              env: {GROK_AGENT_SECRET: agentSecret,...diagnosticEnv}
+              env: {GROK_AGENT_SECRET: agentSecret,GROKBOT_EXPECT_PROXY_CA:"1",...diagnosticEnv}
             }
           : {
               enableInternet: false,
@@ -127,6 +127,7 @@ export class SessionSandbox extends DurableObject<Env> {
               env: {
                 NODE_EXTRA_CA_CERTS: "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
                 GROK_AGENT_SECRET:agentSecret,
+                GROKBOT_EXPECT_PROXY_CA:"1",
                 ...diagnosticEnv
               }
             }
