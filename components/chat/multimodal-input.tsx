@@ -651,7 +651,7 @@ function PureAttachmentsButton({
   );
 
   const caps: Record<string, ModelCapabilities> | undefined =
-    modelsResponse?.capabilities ?? modelsResponse;
+    modelsResponse?.capabilities;
   const hasVision = caps?.[selectedModelId]?.vision ?? false;
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -798,7 +798,7 @@ function PureModelSelectorCompact({
   );
 
   const capabilities: Record<string, ModelCapabilities> | undefined =
-    modelsData?.capabilities ?? modelsData;
+    modelsData?.capabilities;
   const dynamicModels: ChatModel[] | undefined = modelsData?.models;
   const activeModels = dynamicModels ?? chatModels;
 
