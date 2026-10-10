@@ -9,7 +9,7 @@ RUN curl -fsSL https://x.ai/cli/install.sh | bash -s -- "$GROK_VERSION" \
 FROM node:24-trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates git tmux bash procps openssh-client ripgrep \
+    curl ca-certificates gosu git tmux bash procps openssh-client ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 # Grok CLI is installed during image build. Runtime egress is default-denied.
@@ -32,7 +32,8 @@ ENV NODE_EXTRA_CA_CERTS=/etc/cloudflare/certs/cloudflare-containers-ca.crt
 ENV SSL_CERT_FILE=/home/node/.grok/ca-bundle.crt
 ENV CURL_CA_BUNDLE=/home/node/.grok/ca-bundle.crt
 ENV NODE_OPTIONS=--use-openssl-ca
-USER node
+# Startup trusts ephemeral Cloudflare CA as root, then gosu drops privileges.
+USER root
 WORKDIR /workspace
 # Each container serves ACP locally. The token is randomly generated per
 # Durable Object and passed through container.start(). No public port binding.
