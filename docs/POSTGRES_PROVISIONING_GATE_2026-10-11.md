@@ -35,3 +35,17 @@
 - Current branch still needs post-change checks and permanent deploy acceptance.
 
 The system is **partially implemented, not 100% ready**. A temporary preview URL does not waive the gate.
+
+## Browser-to-Cloudflare staging acceptance workflow
+
+A separate protected GitHub Actions workflow now runs an actual browser
+against Next.js and PostgreSQL 17 (disposable CI database) connected to the
+existing Cloudflare staging Worker. It uses environment-protected service
+secrets and cleans up its sandbox in a `finally` block.
+
+- Workflow: `.github/workflows/browser-staging-e2e.yml`
+- Test: `tests/e2e/cloudflare-agent.test.ts`
+- Run: https://github.com/brasalabs6/grokbot/actions/workflows/browser-staging-e2e.yml
+
+The staging browser workflow is distinct from production acceptance. Only a
+successful workflow run with verified real tool output closes its staging gate.
