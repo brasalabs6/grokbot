@@ -32,6 +32,8 @@ export async function GET(request: Request, { params }: Params) {
   if (
     ![
       "PROVISIONING",
+      "RESUMING",
+      "RECOVERING",
       "READY",
       "IDLE",
       "RUNNING",
