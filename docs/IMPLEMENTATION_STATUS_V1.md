@@ -1,6 +1,44 @@
 # GrokBot V1 — Implementation status
 
-Last updated: 2026-10-09. **Work in progress; no production release.**
+Last updated: 2026-10-11. **Work in progress; no production release.**
+
+## Validated checkpoint — October 11, 2026
+
+**Staging MVP integration: PASS. Production release: BLOCKED.**
+
+- The complete authenticated browser → disposable PostgreSQL 17 → Cloudflare
+  sandbox → Grok ACP → permission UI → actual file-writing tool → run
+  reconciliation → STOP/checkpoint → resume via `session/load` → preserved
+  workspace verification **passed**:
+  [browser E2E 38138854708](https://github.com/brasalabs6/grokbot/actions/runs/38138854708).
+  The workflow cleaned up its temporary sandbox.
+- Cloudflare backend `session/load` was repaired to record healthy generation
+  only after the matching backend RPC successfully loads the persisted session.
+  [Staging deploy 38138700646](https://github.com/brasalabs6/grokbot/actions/runs/38138700646)
+  passed before the browser test.
+- The latest branch PostgreSQL connection-pool changes passed
+  [Playwright](https://github.com/brasalabs6/grokbot/actions/runs/38138905695),
+  [agent contracts](https://github.com/brasalabs6/grokbot/actions/runs/38138905712),
+  and [runtime validation](https://github.com/brasalabs6/grokbot/actions/runs/38138905666).
+- `/api/readiness` now fails closed without an active runtime, required secrets,
+  reachable Cloudflare health, and the core migrated PostgreSQL tables. This
+  is a deployment readiness probe, not a full acceptance test.
+- The **dedicated Supabase project does not exist**: on `noagi` Free,
+  `get_cost` returned USD 0/month, but `create_project` was rejected
+  because an administrator already has the allowed two active Free projects
+  across organizations. No AgencyOS resources were changed.
+  See [provisioning gate](POSTGRES_PROVISIONING_GATE_2026-10-11.md).
+  A separate Neon database is a possible alternative after account connection.
+- Vercel preview **is not functional** for persistent agent sessions until a
+  separate PostgreSQL database, matching control-plane secrets, migrations,
+  internal signup and explicit `FEATURE_AGENT_RUNTIME=1` are configured.
+- Strict repository-wide Biome lint **continues to fail**. Full standalone R2
+  backup/restore, production readiness, security hardening, long-running
+  reliability/concurrency and production deployment are not accepted.
+
+Keep PR #1 draft. No merge or production promotion on this checkpoint.
+
+
 
 ## Latest implementation checkpoint — October 10, 2026
 
