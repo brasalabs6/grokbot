@@ -66,7 +66,7 @@ export const {
   providers: [
     Credentials({
       async authorize(credentials) {
-        const email = String(credentials.email ?? "");
+        const email = String(credentials.email ?? "").trim().toLowerCase();
         const password = String(credentials.password ?? "");
         if (!isInternalEmailAllowed(email)) {
           await compare(password, DUMMY_PASSWORD);
