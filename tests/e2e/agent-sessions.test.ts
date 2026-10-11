@@ -35,7 +35,7 @@ test.describe("GrokBot internal MVP", () => {
     page,
   }) => {
     await page.goto("/register");
-    await page.getByLabel("Email").fill("internal-test@example.test");
+    await page.getByLabel("Email").fill("INTERNAL-TEST@EXAMPLE.TEST");
     await page.getByLabel("Password").fill("ci-test-password-2026");
     await page
       .getByLabel("Private invitation code")
