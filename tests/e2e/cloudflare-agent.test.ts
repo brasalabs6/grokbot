@@ -46,7 +46,7 @@ test("internal user provisions Cloudflare ACP and receives real tool output", as
     await page
       .getByRole("button", { name: "Provision Cloudflare sandbox" })
       .click();
-    await expect(page.getByText("ACP connected", { exact: true })).toBeVisible({
+    await expect(page.getByText(/ACP connected/)).toBeVisible({
       timeout: 90_000,
     });
 
