@@ -50,6 +50,8 @@ export async function POST(request: Request, { params }: Params) {
   if (
     ![
       "PROVISIONING",
+      "RESUMING",
+      "RECOVERING",
       "READY",
       "IDLE",
       "RUNNING",
