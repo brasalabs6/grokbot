@@ -49,3 +49,15 @@ secrets and cleans up its sandbox in a `finally` block.
 
 The staging browser workflow is distinct from production acceptance. Only a
 successful workflow run with verified real tool output closes its staging gate.
+
+## Vercel Marketplace database option — verified 2026-10-11
+
+- Vercel team: `nexus` (`guicorinthias-gmailcoms-projects`, `team_7I0mAEYzzzO86XIxP9EkNM0y`).
+- Vercel application: `grokbot` (`prj_FhT9f4pd6Fh0KXEBznWUFQ5rCEoU`).
+- Neon Marketplace integration **already installed** under configuration `icfg_AD4tOpq8jgzxxwtGw3gc6sXQ`. Do not install a duplicate integration.
+- Vercel's live integration plan lookup confirmed `free_v3` **Free**, no payment method required; 1 GB per project, up to 100 CU-hours per project (provider terms subject to change). Other plans are paid and not authorized.
+- Neon product metadata supports region `gru1` (Brazil). For the isolated GrokBot database, select name `grokbot`, `gru1`, `free_v3`, disable built-in Neon Auth (the application uses its own restricted NextAuth credentials), and connect to Vercel `grokbot` **preview** only until acceptance passes.
+- Existing integration configuration shows no linked projects; Vercel project env keys contain **no** `POSTGRES_URL` / `DATABASE_URL` at inspection time. No persistent database has been provisioned or linked by this session.
+- Vercel MCP currently exposes resource listing/configuration but **no Marketplace resource creation action**. The internal container lacks the Vercel CLI, `VERCEL_TOKEN`, and a local Vercel authenticated session. Do not invent credentials, or use an unrelated Vercel/AgencyOS database.
+- **One-time provisioning step:** in [Vercel's Neon Marketplace](https://vercel.com/marketplace/neon) under the team above, create a new Free PostgreSQL store and link it to the project's preview deployment; alternatively, use an authenticated local Vercel CLI: `vercel integration add neon --name grokbot --plan free_v3 -e preview` after linking the correct project and inspecting `--help` for supported region/metadata arguments.
+- Verify Vercel automatically injected pooled and direct/unchained connection variables, map the pooler URL to `POSTGRES_URL` securely if not already injected; run migrations against the isolated new Neon database and then do permanent end-to-end acceptance. Do not print connection strings to logs or commit them.
