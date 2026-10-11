@@ -13,6 +13,10 @@ test.describe("GrokBot internal MVP", () => {
     ).toBeVisible();
     const unauthenticated = await page.request.get("/api/agent-sessions");
     expect(unauthenticated.status()).toBe(401);
+    // Vercel deployment health is not enough: disabled runtime must fail readiness.
+    const readiness = await page.request.get("/api/readiness");
+    expect(readiness.status()).toBe(503);
+    expect((await readiness.json()).ready).toBe(false);
   });
 
   test("signup denies addresses outside the internal allowlist", async ({
