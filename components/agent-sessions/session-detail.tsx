@@ -6,7 +6,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AcpChat } from "./acp-chat";
 import { AgentTerminal } from "./agent-terminal";
@@ -38,6 +38,13 @@ export function SessionDetail({
   useEffect(() => {
     setCurrentState(initialState);
   }, [initialState]);
+  const onAgentReady = useCallback(() => {
+    setCurrentState((previous) =>
+      ["PROVISIONING", "RESUMING", "RECOVERING"].includes(previous)
+        ? "READY"
+        : previous
+    );
+  }, []);
 
   async function stopContainer() {
     if (
@@ -253,6 +260,8 @@ export function SessionDetail({
             <AcpChat
               active={[
                 "PROVISIONING",
+                "RESUMING",
+                "RECOVERING",
                 "READY",
                 "IDLE",
                 "RUNNING",
@@ -260,6 +269,7 @@ export function SessionDetail({
                 "DEGRADED",
               ].includes(currentState)}
               sessionId={id}
+              onReady={onAgentReady}
             />
           </>
         )}
