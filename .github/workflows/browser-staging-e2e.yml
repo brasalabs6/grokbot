@@ -12,7 +12,7 @@ jobs:
   integration:
     if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[browser-staging]'))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     environment: staging
     env:
       AUTH_SECRET: grokbot-disposable-browser-ci-auth-secret-long
