@@ -59,13 +59,23 @@ export async function GET() {
   });
   try {
     const [database, worker] = await Promise.all([
-      sql`select 1 as ok`,
+      sql`select
+        to_regclass('public."User"') is not null as users_ready,
+        to_regclass('public."AgentSession"') is not null as sessions_ready,
+        to_regclass('public."AgentRun"') is not null as runs_ready,
+        to_regclass('public."AgentOperation"') is not null as operations_ready`,
       fetch(new URL("/health", origin), {
         cache: "no-store",
         signal: AbortSignal.timeout(4000),
       }),
     ]);
-    if (Number(database[0]?.ok) !== 1 || !worker.ok) {
+    if (
+      !database[0]?.users_ready ||
+      !database[0]?.sessions_ready ||
+      !database[0]?.runs_ready ||
+      !database[0]?.operations_ready ||
+      !worker.ok
+    ) {
       return Response.json({ ready: false }, { headers, status: 503 });
     }
     return Response.json({ ready: true }, { headers, status: 200 });
