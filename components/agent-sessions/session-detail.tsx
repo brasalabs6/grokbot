@@ -18,13 +18,11 @@ export function SessionDetail({
   initialState,
   generation,
   modelId,
-  stateVersion,
 }: {
   id: string;
   initialState: string;
   generation: number;
   modelId: string;
-  stateVersion: number;
 }) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("chat");
@@ -49,6 +47,23 @@ export function SessionDetail({
     router.refresh();
   }, [router]);
 
+  // Session versions change on ACP readiness and after each completed run.
+  // Never send a stale version captured on the initial server render.
+  async function currentSessionVersion(): Promise<number> {
+    const response = await fetch(`/api/agent-sessions/${id}`, {
+      cache: "no-store",
+    });
+    const result = (await response.json()) as {
+      error?: { code?: string };
+      session?: { stateVersion?: number };
+    };
+    const version = result.session?.stateVersion;
+    if (!response.ok || !Number.isSafeInteger(version) || !version || version < 1) {
+      throw new Error(result.error?.code ?? "SESSION_VERSION_UNAVAILABLE");
+    }
+    return version;
+  }
+
   async function stopContainer() {
     if (
       !window.confirm(
@@ -62,10 +77,11 @@ export function SessionDetail({
     setStopBusy(true);
     setStartError(null);
     try {
+      const expectedSessionVersion = await currentSessionVersion();
       const response = await fetch(`/api/agent-sessions/${id}/stop`, {
         body: JSON.stringify({
           checkpoint: true,
-          expectedSessionVersion: stateVersion,
+          expectedSessionVersion,
           operationId,
         }),
         headers: { "Content-Type": "application/json" },
@@ -121,9 +137,10 @@ export function SessionDetail({
     setStartBusy(true);
     setStartError(null);
     try {
+      const expectedSessionVersion = await currentSessionVersion();
       const response = await fetch("/api/agent-sessions/" + id + "/start", {
         body: JSON.stringify({
-          expectedSessionVersion: stateVersion,
+          expectedSessionVersion,
           operationId: crypto.randomUUID(),
         }),
         headers: { "Content-Type": "application/json" },
