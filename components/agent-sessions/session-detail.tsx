@@ -44,7 +44,10 @@ export function SessionDetail({
         ? "READY"
         : previous
     );
-  }, []);
+    // Rehydrate the durable stateVersion from the server; STOP uses optimistic
+    // concurrency and a stale version would fail after ACP reconciliation.
+    router.refresh();
+  }, [router]);
 
   async function stopContainer() {
     if (
