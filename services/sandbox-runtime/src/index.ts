@@ -503,6 +503,9 @@ export class SessionSandbox extends DurableObject<Env> {
     const browser = pair[0];
     const bridge = pair[1];
     bridge.accept();
+    // A restored ACP session/load response may have no sessionId field. Only
+    // confirm resumed health after matching a successfully forwarded RPC.
+    const pendingSessionLoads = new Map<string, string>();
     // Maintain socket-local processing order for durable event ordering.
     let delivery = Promise.resolve();
     backend.addEventListener("message", (event) => {
@@ -516,6 +519,27 @@ export class SessionSandbox extends DurableObject<Env> {
           if (typeof event.data === "string") {
             try {
               const msg = JSON.parse(event.data) as Record<string, unknown>;
+              if (msg.id !== undefined && ("result" in msg || "error" in msg)) {
+                const key = String(msg.id);
+                const resumedSession = pendingSessionLoads.get(key);
+                pendingSessionLoads.delete(key);
+                if (resumedSession && "result" in msg && !("error" in msg)) {
+                  const [known, currentGeneration] = await Promise.all([
+                    this.ctx.storage.get<string>("acpSessionId"),
+                    this.ctx.storage.get<number>("generation"),
+                  ]);
+                  if (
+                    known === resumedSession &&
+                    currentGeneration === ticket.generation &&
+                    this.container().running
+                  ) {
+                    await this.ctx.storage.put(
+                      "acpHealthyGeneration",
+                      ticket.generation
+                    );
+                  }
+                }
+              }
               const active = await this.ctx.storage.get<{
                 runId: string;
                 rpcId: unknown;
@@ -683,6 +707,20 @@ export class SessionSandbox extends DurableObject<Env> {
             return;
           }
           if (backend.readyState === WebSocket.OPEN) {
+            const params =
+              message.params && typeof message.params === "object"
+                ? (message.params as Record<string, unknown>)
+                : null;
+            if (
+              message.method === "session/load" &&
+              message.id !== undefined &&
+              typeof params?.sessionId === "string" &&
+              params.sessionId.length > 0 &&
+              params.sessionId.length < 256 &&
+              pendingSessionLoads.size < 32
+            ) {
+              pendingSessionLoads.set(String(message.id), params.sessionId);
+            }
             backend.send(raw);
           }
         })
