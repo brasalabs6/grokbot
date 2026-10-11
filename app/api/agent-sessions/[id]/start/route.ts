@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
-import { RuntimeApiError, startRuntime } from "@/lib/agent/runtime-client";
+import { RuntimeApiError, runtimeConfiguration, startRuntime } from "@/lib/agent/runtime-client";
 import {
   AgentConflict,
   claimStartOperation,
@@ -29,12 +29,21 @@ export async function POST(request: Request, { params }: Params) {
       { status: 503 }
     );
   }
-  const origin = request.headers.get("Origin");
-  if (origin && origin !== new URL(request.url).origin) {
+  if (request.headers.get("Origin") !== new URL(request.url).origin) {
     return Response.json(
       { error: { code: "INVALID_ORIGIN" } },
       { status: 403 }
     );
+  }
+  // Reject misconfigured deployments before accepting a durable START intent.
+  // Otherwise the session can enter FAILED without attempting provisioning.
+  try {
+    runtimeConfiguration();
+    if ((process.env.RUNTIME_TICKET_SECRET?.length ?? 0) < 32) {
+      return Response.json({ error: { code: "RUNTIME_TICKETS_NOT_CONFIGURED" } }, { status: 503 });
+    }
+  } catch (error) {
+    return Response.json({ error: { code: error instanceof RuntimeApiError ? error.code : "RUNTIME_NOT_CONFIGURED" } }, { status: 503 });
   }
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) {
