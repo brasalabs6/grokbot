@@ -42,6 +42,10 @@ test.describe("GrokBot internal MVP", () => {
       .fill("ci-only-registration-code-32-chars-long");
     await page.getByRole("button", { name: "Sign up" }).click();
     await expect(page.getByText("Account created!")).toBeVisible();
+    const sessionResponse = await page.request.get("/api/auth/session");
+    expect(sessionResponse.status()).toBe(200);
+    const signedInSession = await sessionResponse.json();
+    expect(signedInSession?.user?.email).toBe("internal-test@example.test");
     await page.goto("/agent-sessions");
     await expect(
       page.getByRole("heading", { name: "Agent sessions" })
