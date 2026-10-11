@@ -9,7 +9,7 @@ test.skip(
 test("internal user provisions Cloudflare ACP and receives real tool output", async ({
   page,
 }) => {
-  test.setTimeout(280_000);
+  test.setTimeout(440_000);
   const runtimeURL = process.env.CLOUDFLARE_RUNTIME_URL;
   const controlSecret = process.env.CONTROL_PLANE_SERVICE_SECRET;
   if (!runtimeURL || !controlSecret || controlSecret.length < 32) {
@@ -96,6 +96,36 @@ test("internal user provisions Cloudflare ACP and receives real tool output", as
         { intervals: [1000, 2000, 5000], timeout: 180_000 }
       )
       .toBe(marker);
+
+    // A successful tool run can advance the optimistic session version.
+    // STOP must read the current version instead of using the initial render.
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/agent-sessions/${sandboxSessionId}`);
+      const body = (await response.json()) as { session?: { state?: string } };
+      return body.session?.state;
+    }, { timeout: 60_000 }).toBe("IDLE");
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Stop and checkpoint" }).click();
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/agent-sessions/${sandboxSessionId}`);
+      const body = (await response.json()) as { session?: { state?: string } };
+      return body.session?.state;
+    }, { timeout: 60_000 }).toBe("STOPPED");
+
+    await page
+      .getByRole("button", { name: "Resume Cloudflare sandbox" })
+      .click();
+    await expect(page.getByText(/ACP connected/)).toBeVisible({
+      timeout: 90_000,
+    });
+
+    const postRestore = await page.request.get(
+      `/api/agent-sessions/${sandboxSessionId}/files?mode=read&path=grokbot-browser-proof.txt`
+    );
+    expect(postRestore.status()).toBe(200);
+    const restored = (await postRestore.json()) as { content?: string };
+    expect(restored.content?.trim()).toBe(marker);
   } finally {
     // Always clean up the disposable sandbox directly through the trusted
     // staging control plane, even if browser auth or reconciliation fails.
