@@ -31,7 +31,7 @@ export const login = async (
     });
 
     await signIn("credentials", {
-      email: validatedData.email,
+      email: validatedData.email.trim().toLowerCase(),
       password: validatedData.password,
       redirect: false,
     });
@@ -87,14 +87,15 @@ export const register = async (
       return { status: "not_allowed" };
     }
 
-    const [user] = await getUser(validatedData.email);
+    const normalizedEmail = validatedData.email.trim().toLowerCase();
+    const [user] = await getUser(normalizedEmail);
 
     if (user) {
       return { status: "user_exists" } as RegisterActionState;
     }
-    await createUser(validatedData.email, validatedData.password);
+    await createUser(normalizedEmail, validatedData.password);
     await signIn("credentials", {
-      email: validatedData.email,
+      email: validatedData.email.trim().toLowerCase(),
       password: validatedData.password,
       redirect: false,
     });
