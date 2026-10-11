@@ -17,12 +17,21 @@ export async function GET() {
     Boolean(process.env.POSTGRES_URL) &&
     Boolean(process.env.AUTH_SECRET && process.env.AUTH_SECRET.length >= 32) &&
     Boolean(process.env.GROKBOT_ALLOWED_EMAILS?.trim()) &&
-    Boolean(process.env.GROKBOT_SIGNUP_KEY && process.env.GROKBOT_SIGNUP_KEY.length >= 32) &&
-    Boolean(process.env.CONTROL_PLANE_SERVICE_SECRET && process.env.CONTROL_PLANE_SERVICE_SECRET.length >= 32) &&
-    Boolean(process.env.RUNTIME_TICKET_SECRET && process.env.RUNTIME_TICKET_SECRET.length >= 32);
+    Boolean(
+      process.env.GROKBOT_SIGNUP_KEY &&
+        process.env.GROKBOT_SIGNUP_KEY.length >= 32
+    ) &&
+    Boolean(
+      process.env.CONTROL_PLANE_SERVICE_SECRET &&
+        process.env.CONTROL_PLANE_SERVICE_SECRET.length >= 32
+    ) &&
+    Boolean(
+      process.env.RUNTIME_TICKET_SECRET &&
+        process.env.RUNTIME_TICKET_SECRET.length >= 32
+    );
 
   if (!configured) {
-    return Response.json({ ready: false }, { status: 503, headers });
+    return Response.json({ ready: false }, { headers, status: 503 });
   }
 
   let origin: URL;
@@ -36,16 +45,16 @@ export async function GET() {
       origin.hash ||
       origin.pathname !== "/"
     ) {
-      return Response.json({ ready: false }, { status: 503, headers });
+      return Response.json({ ready: false }, { headers, status: 503 });
     }
   } catch {
-    return Response.json({ ready: false }, { status: 503, headers });
+    return Response.json({ ready: false }, { headers, status: 503 });
   }
 
   const sql = postgres(process.env.POSTGRES_URL as string, {
-    max: 1,
     connect_timeout: 3,
     idle_timeout: 1,
+    max: 1,
     prepare: false,
   });
   try {
@@ -57,11 +66,11 @@ export async function GET() {
       }),
     ]);
     if (Number(database[0]?.ok) !== 1 || !worker.ok) {
-      return Response.json({ ready: false }, { status: 503, headers });
+      return Response.json({ ready: false }, { headers, status: 503 });
     }
-    return Response.json({ ready: true }, { status: 200, headers });
+    return Response.json({ ready: true }, { headers, status: 200 });
   } catch {
-    return Response.json({ ready: false }, { status: 503, headers });
+    return Response.json({ ready: false }, { headers, status: 503 });
   } finally {
     await sql.end({ timeout: 1 }).catch(() => undefined);
   }

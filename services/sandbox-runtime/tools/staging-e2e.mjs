@@ -542,8 +542,15 @@ try {
     }
     let restoredPort = null;
     for (let attempt = 0; attempt < 45; attempt += 1) {
-      restoredPort = await internal("GET", "acp-port-health", undefined, 15_000);
-      if (restoredPort.ready) break;
+      restoredPort = await internal(
+        "GET",
+        "acp-port-health",
+        undefined,
+        15_000
+      );
+      if (restoredPort.ready) {
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     if (!restoredPort?.ready) {

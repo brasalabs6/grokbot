@@ -30,12 +30,18 @@ test("internal user provisions Cloudflare ACP and receives real tool output", as
     await expect(page.getByText("Account created!")).toBeVisible();
 
     await page.goto("/agent-sessions");
-    await expect(page.getByRole("heading", { name: "Agent sessions" })).toBeVisible();
-    await page.getByLabel("Title").fill("Disposable Cloudflare browser acceptance");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Agent sessions" })
+    ).toBeVisible();
+    await page
+      .getByLabel("Title")
+      .fill("Disposable Cloudflare browser acceptance");
+    await page.getByRole("button", { exact: true, name: "Create" }).click();
     await expect(page).toHaveURL(/\/agent-sessions\/[0-9a-f-]{36}$/);
     sandboxSessionId = page.url().split("/").at(-1);
-    if (!sandboxSessionId) throw new Error("SESSION_CREATION_NOT_CONFIRMED");
+    if (!sandboxSessionId) {
+      throw new Error("SESSION_CREATION_NOT_CONFIRMED");
+    }
 
     await page
       .getByRole("button", { name: "Provision Cloudflare sandbox" })
@@ -44,9 +50,12 @@ test("internal user provisions Cloudflare ACP and receives real tool output", as
       timeout: 90_000,
     });
 
-    await page.getByRole("textbox").last().fill(
-      `Create /workspace/grokbot-browser-proof.txt with exactly ${marker} on one line, then read the file with a real tool. Do not merely describe it.`
-    );
+    await page
+      .getByRole("textbox")
+      .last()
+      .fill(
+        `Create /workspace/grokbot-browser-proof.txt with exactly ${marker} on one line, then read the file with a real tool. Do not merely describe it.`
+      );
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect
@@ -55,31 +64,30 @@ test("internal user provisions Cloudflare ACP and receives real tool output", as
           const result = await page.request.get(
             `/api/agent-sessions/${sandboxSessionId}/files?mode=read&path=grokbot-browser-proof.txt`
           );
-          if (!result.ok()) return null;
+          if (!result.ok()) {
+            return null;
+          }
           const body = (await result.json()) as {
             ok?: boolean;
             content?: string;
           };
           return body.ok ? body.content?.trim() : null;
         },
-        { timeout: 180_000, intervals: [1000, 2000, 5000] }
+        { intervals: [1000, 2000, 5000], timeout: 180_000 }
       )
       .toBe(marker);
   } finally {
     // Always clean up the disposable sandbox directly through the trusted
     // staging control plane, even if browser auth or reconciliation fails.
     if (sandboxSessionId) {
-      const stopURL = new URL(
-        `/internal/${sandboxSessionId}/stop`,
-        runtimeURL
-      );
+      const stopURL = new URL(`/internal/${sandboxSessionId}/stop`, runtimeURL);
       const response = await fetch(stopURL, {
-        method: "POST",
+        body: JSON.stringify({ checkpoint: false, operationId: randomUUID() }),
         headers: {
           Authorization: `Bearer ${controlSecret}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ checkpoint: false, operationId: randomUUID() }),
+        method: "POST",
         signal: AbortSignal.timeout(100_000),
       }).catch(() => null);
       if (!response?.ok) {

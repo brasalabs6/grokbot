@@ -61,6 +61,8 @@ test.describe("GrokBot internal MVP", () => {
     expect(list.status()).toBe(200);
     expect((await list.json()).items).toEqual([]);
     await page.getByRole("button", { exact: true, name: "Create" }).click();
-    await expect(page.getByText("RUNTIME_DISABLED", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("RUNTIME_DISABLED", { exact: true })
+    ).toBeVisible();
   });
 });
