@@ -61,6 +61,26 @@ test("internal user provisions Cloudflare ACP and receives real tool output", as
     await expect
       .poll(
         async () => {
+          // Permission mode is "ask". Respond via the actual UI only in this
+          // disposable test sandbox, rather than bypassing agent authorization.
+          const dialog = page.getByRole("alertdialog", {
+            name: "Tool permission requested",
+          });
+          if (await dialog.isVisible().catch(() => false)) {
+            const options = dialog.getByRole("button");
+            const labels = await options.allTextContents();
+            const preferred = labels.findIndex(
+              (label) =>
+                /allow|approve|yes|run|execute/i.test(label) &&
+                !/deny|reject/i.test(label)
+            );
+            const fallback = labels.findIndex(
+              (label) => !/deny|reject/i.test(label)
+            );
+            const chosen = preferred >= 0 ? preferred : fallback;
+            if (chosen < 0) throw new Error("SAFE_TOOL_PERMISSION_NOT_FOUND");
+            await options.nth(chosen).click();
+          }
           const result = await page.request.get(
             `/api/agent-sessions/${sandboxSessionId}/files?mode=read&path=grokbot-browser-proof.txt`
           );
