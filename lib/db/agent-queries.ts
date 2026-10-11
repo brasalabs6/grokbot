@@ -25,7 +25,8 @@ import {
 const sqlClient = postgres(process.env.POSTGRES_URL ?? "", {
   connect_timeout: 10,
   idle_timeout: 20,
-  max: 3,
+  max: 2,
+  prepare: false,
 });
 const db = drizzle(sqlClient);
 export type AgentSessionRecord = typeof agentSession.$inferSelect;
