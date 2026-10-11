@@ -362,6 +362,9 @@ export function AcpChat({
             socket.current = null;
           }
           setConnected(false);
+          // A pending permission reply is bound to this socket. Never leave an
+          // unusable authorization dialog visible after it disconnects.
+          setApproval(null);
           for (const waiter of outstanding.values()) {
             waiter.reject(new Error("ACP_CONNECTION_LOST"));
           }
