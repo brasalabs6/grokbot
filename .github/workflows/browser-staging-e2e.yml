@@ -1,0 +1,71 @@
+name: GrokBot browser to Cloudflare staging
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/grokbot-p00-acp-cloudflare-spike]
+permissions:
+  contents: read
+concurrency:
+  group: grokbot-browser-staging
+  cancel-in-progress: false
+jobs:
+  integration:
+    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[browser-staging]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      AUTH_SECRET: grokbot-disposable-browser-ci-auth-secret-long
+      AUTH_TRUST_HOST: "true"
+      POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/grokbot_browser_staging
+      GROKBOT_ALLOWED_EMAILS: grokbot-browser-ci@example.test
+      GROKBOT_SIGNUP_KEY: grokbot-browser-ci-only-invite-32-characters
+      FEATURE_AGENT_RUNTIME: "1"
+      GROKBOT_STAGING_E2E: "1"
+      CLOUDFLARE_RUNTIME_URL: https://grokbot-sandbox-runtime-staging.guibelongtovi-a22.workers.dev/
+      CONTROL_PLANE_SERVICE_SECRET: ${{ secrets.CONTROL_PLANE_SERVICE_SECRET }}
+      RUNTIME_TICKET_SECRET: ${{ secrets.RUNTIME_TICKET_SECRET }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: grokbot_browser_staging
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d grokbot_browser_staging"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Check protected staging credentials
+        run: |
+          test -n "$CONTROL_PLANE_SERVICE_SECRET" || { echo 'CONTROL_SECRET_MISSING'; exit 1; }
+          test -n "$RUNTIME_TICKET_SECRET" || { echo 'RUNTIME_TICKET_SECRET_MISSING'; exit 1; }
+      - name: Install project
+        run: pnpm install --frozen-lockfile
+      - name: Migrate disposable database
+        run: pnpm db:migrate
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Exercise authenticated browser, PostgreSQL, Cloudflare and Grok
+        run: pnpm exec playwright test tests/e2e/cloudflare-agent.test.ts
+      - name: Upload browser traces
+        uses: actions/upload-artifact@v4
+        if: always() && !cancelled()
+        with:
+          name: grokbot-staging-browser-report
+          path: playwright-report/
+          retention-days: 7
