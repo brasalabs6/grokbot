@@ -1,6 +1,7 @@
 import { ipAddress } from "@vercel/functions";
 import { auth } from "@/app/(auth)/auth";
 import { createSessionSchema } from "@/lib/agent/contracts";
+import { runtimeConfiguration, RuntimeApiError } from "@/lib/agent/runtime-client";
 import { createAgentSession, listAgentSessions } from "@/lib/db/agent-queries";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
@@ -30,6 +31,15 @@ export async function POST(request: Request) {
       { error: { code: "RUNTIME_DISABLED" } },
       { status: 503 }
     );
+  }
+  try {
+    runtimeConfiguration();
+    if ((process.env.RUNTIME_TICKET_SECRET?.length ?? 0) < 32) {
+      return Response.json({ error: { code: "RUNTIME_TICKETS_NOT_CONFIGURED" } }, { status: 503 });
+    }
+  } catch (error) {
+    const code = error instanceof RuntimeApiError ? error.code : "RUNTIME_NOT_CONFIGURED";
+    return Response.json({ error: { code } }, { status: 503 });
   }
   await checkIpRateLimit(ipAddress(request));
   const raw = await request.json().catch(() => null);
