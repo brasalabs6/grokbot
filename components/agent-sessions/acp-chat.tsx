@@ -49,9 +49,11 @@ function updateEntries(
 export function AcpChat({
   sessionId,
   active,
+  onReady,
 }: {
   sessionId: string;
   active: boolean;
+  onReady?: () => void;
 }) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [draft, setDraft] = useState("");
@@ -338,6 +340,7 @@ export function AcpChat({
                 reconnectAttempt = 0;
                 setConnected(true);
                 setError(null);
+                onReady?.();
               }
             } catch (err) {
               if (!disposed) {
@@ -403,7 +406,7 @@ export function AcpChat({
       }
       outstanding.clear();
     };
-  }, [active, sessionId, rpc, onProtocolMessage]);
+  }, [active, sessionId, rpc, onProtocolMessage, onReady]);
 
   async function sendPrompt() {
     const text = draft.trim();
