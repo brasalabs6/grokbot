@@ -1,3 +1,13 @@
+## October 12, 2026 — New Supabase GrokBot database verified
+
+- A dedicated `grokbot` PostgreSQL 17 project now exists and is **ACTIVE_HEALTHY** in the Supabase `noagi` organization, project ref `yfviherjflnuntzofsmd` (region `us-west-2`).
+- The repository's legacy and agent runtime schemas were successfully applied using the connected Supabase SQL migration tools: **15 application tables**, all empty, all with Row Level Security enabled and public roles denied access.
+- The two Drizzle migration hashes and timestamps were registered in `drizzle.__drizzle_migrations`; future `pnpm db:migrate` can see their history. Verified the migration history has two 64-byte hexadecimal hashes.
+- A dedicated `grokbot_runtime` role exists with table-specific grants/policies, but is **NOLOGIN**. Attempts to activate a new password-bearing login were blocked by connector safety checks; no working database password was retrieved or installed in Vercel.
+- The Vercel project has no `POSTGRES_URL` and its observed configuration is still preview-only. Supabase docs require an actual transaction-pooler connection URI from the dashboard Connect dialog (host index is project-specific and cannot safely be guessed). Do not invent pooler hosts.
+- Supabase Data API security checks: `anon` and `authenticated` have no SELECT access to `AgentSession`; public GrokBot tables are RLS-enabled. Security rules are versioned in `docs/db/SUPABASE_SECURITY.sql`.
+- **Production is not deployed or accepted.** Securely configure a valid pooler `POSTGRES_URL` and paired auth/runtime secrets in Vercel, test network connectivity and authenticated ACP flow, then release. Do not disable controls to make readiness pass.
+
 # GrokBot V1 — Implementation status
 
 Last updated: 2026-10-11. **Work in progress; no production release.**
