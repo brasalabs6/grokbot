@@ -1,0 +1,70 @@
+# One-time Cloudflare production Worker bootstrap. Isolated from staging DO state.
+# We reuse the existing *protected* staging bootstrap credentials only in Actions
+# to provision the independent production worker. Never log secret values.
+name: Bootstrap GrokBot production Worker
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/grokbot-p00-acp-cloudflare-spike]
+permissions:
+  contents: read
+concurrency:
+  group: grokbot-worker-production-bootstrap
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-production]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      GROKBOT_PROXY_API_KEY: ${{ secrets.GROKBOT_PROXY_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify credentials without revealing values
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$GROKBOT_PROXY_API_KEY"
+      - name: Install pinned runtime dependencies
+        working-directory: services/sandbox-runtime
+        run: pnpm install --frozen-lockfile
+      - name: Fail fast until production secrets are installed via Cloudflare dashboard
+        working-directory: services/sandbox-runtime
+        run: |
+          names="$(pnpm exec wrangler secret list --config wrangler.production.jsonc)"
+          printf '%s' "$names" | node -e '
+            let data = "";
+            process.stdin.on("data", c => { data += c; });
+            process.stdin.on("end", () => {
+              const names = new Set(JSON.parse(data).map(item => item.name));
+              for (const name of ["CONTROL_PLANE_SERVICE_SECRET", "RUNTIME_TICKET_SECRET"]) {
+                if (!names.has(name)) {
+                  console.error("Production Worker secret missing: " + name);
+                  process.exitCode = 1;
+                }
+              }
+            });
+          '
+      - name: Verify runtime type contracts
+        working-directory: services/sandbox-runtime
+        run: pnpm check
+      - name: Install existing proxy secret on isolated production Worker
+        working-directory: services/sandbox-runtime
+        run: |
+          printf '%s' "$GROKBOT_PROXY_API_KEY" | pnpm exec wrangler secret put GROKBOT_PROXY_API_KEY --config wrangler.production.jsonc
+      - name: Deploy independent production Worker and container
+        working-directory: services/sandbox-runtime
+        run: pnpm exec wrangler deploy --config wrangler.production.jsonc
+      - name: Verify production Worker liveness (not application readiness)
+        run: curl --fail --silent --show-error --max-time 20 https://grokbot-sandbox-runtime-production.guibelongtovi-a22.workers.dev/health

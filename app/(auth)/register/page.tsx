@@ -7,6 +7,7 @@ import { useActionState, useEffect, useState } from "react";
 import { AuthForm } from "@/components/chat/auth-form";
 import { SubmitButton } from "@/components/chat/submit-button";
 import { toast } from "@/components/chat/toast";
+import { Input } from "@/components/ui/input";
 import { type RegisterActionState, register } from "../actions";
 
 export default function Page() {
@@ -25,6 +26,12 @@ export default function Page() {
   useEffect(() => {
     if (state.status === "user_exists") {
       toast({ description: "Account already exists!", type: "error" });
+    } else if (state.status === "not_allowed") {
+      toast({
+        description:
+          "Registration requires an authorized email and a private invitation code.",
+        type: "error",
+      });
     } else if (state.status === "failed") {
       toast({ description: "Failed to create account!", type: "error" });
     } else if (state.status === "invalid_data") {
@@ -48,8 +55,23 @@ export default function Page() {
   return (
     <>
       <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
-      <p className="text-sm text-muted-foreground">Get started for free</p>
+      <p className="text-sm text-muted-foreground">
+        Internal access requires an invitation
+      </p>
       <AuthForm action={handleSubmit} defaultEmail={email}>
+        <label
+          className="flex flex-col gap-2 text-sm text-muted-foreground"
+          htmlFor="inviteCode"
+        >
+          Private invitation code
+          <Input
+            autoComplete="off"
+            id="inviteCode"
+            name="inviteCode"
+            required
+            type="password"
+          />
+        </label>
         <SubmitButton isSuccessful={isSuccessful}>Sign up</SubmitButton>
         <p className="text-center text-[13px] text-muted-foreground">
           {"Have an account? "}

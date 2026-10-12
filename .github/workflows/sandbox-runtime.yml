@@ -1,0 +1,98 @@
+name: Sandbox runtime validation
+on:
+  pull_request:
+    paths:
+      - "services/sandbox-runtime/**"
+      - "lib/agent/**"
+      - "tests/unit/agent-contracts.test.ts"
+      - ".github/workflows/sandbox-runtime.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/sandbox-runtime/**"
+      - "lib/agent/**"
+      - "tests/unit/agent-contracts.test.ts"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install sandbox runtime
+        working-directory: services/sandbox-runtime
+        run: pnpm install --frozen-lockfile
+      - name: Generate Cloudflare runtime types
+        working-directory: services/sandbox-runtime
+        run: pnpm exec wrangler types
+      - name: Typecheck Cloudflare code
+        working-directory: services/sandbox-runtime
+        run: pnpm check
+
+  container-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Grok runtime image
+        run: docker build --tag grokbot-acp-test --progress=plain -f services/sandbox-runtime/Dockerfile services/sandbox-runtime
+      - name: Verify proxy model profiles and credential boundaries
+        run: node services/sandbox-runtime/tools/verify-proxy-models.mjs
+      - name: Check ACP probe syntax
+        run: node --check services/sandbox-runtime/tools/acp-smoke.mjs
+      - name: Check remote staging E2E syntax
+        run: node --check services/sandbox-runtime/tools/staging-e2e.mjs
+      - name: Check actual Grok ACP daemon in Docker
+        env:
+          GROK_AGENT_SECRET: integration-smoke-test-token
+        run: |
+          docker run --rm -d --name grokbot-acp-test \
+            -e GROK_AGENT_SECRET \
+            -p 127.0.0.1:2419:2419 grokbot-acp-test
+          trap 'docker logs --tail 50 grokbot-acp-test || true; docker rm -f grokbot-acp-test || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -sS --max-time 1 -o /dev/null http://127.0.0.1:2419/ws; then
+              break
+            fi
+            sleep 1
+          done
+          node services/sandbox-runtime/tools/local-server-smoke.mjs
+          node --check services/sandbox-runtime/tools/workspace.mjs
+          docker exec grokbot-acp-test sh -c 'printf test-content > /workspace/ci-file.txt'
+          docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs list . | grep 'ci-file.txt'
+          docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs read ci-file.txt | grep 'test-content'
+          if docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs read ../../etc/passwd; then
+            echo 'Workspace traversal unexpectedly permitted'
+            exit 1
+          fi
+          docker exec grokbot-acp-test ln -s /etc/passwd /workspace/escape-link
+          if docker exec grokbot-acp-test node /opt/grokbot/workspace.mjs read escape-link; then
+            echo 'Workspace symlink escape unexpectedly permitted'
+            exit 1
+          fi
+
+      - name: Verify Grok ACP daemon boots without outbound Internet
+        env:
+          GROK_AGENT_SECRET: offline-ci-smoke-secret
+        run: |
+          docker run --rm -d --network none --name grokbot-acp-offline \
+            -e GROK_AGENT_SECRET grokbot-acp-test
+          trap 'docker rm -f grokbot-acp-offline || true' EXIT
+          docker cp services/sandbox-runtime/tools/local-server-smoke.mjs \
+            grokbot-acp-offline:/tmp/offline-smoke.mjs
+          sleep 12
+          docker exec grokbot-acp-offline node /tmp/offline-smoke.mjs

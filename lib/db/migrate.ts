@@ -9,8 +9,7 @@ config({
 
 const runMigrate = async () => {
   if (!process.env.POSTGRES_URL) {
-    console.log("POSTGRES_URL not defined, skipping migrations");
-    process.exit(0);
+    throw new Error("POSTGRES_URL is required for explicit db:migrate");
   }
 
   const connection = postgres(process.env.POSTGRES_URL, { max: 1 });

@@ -33,7 +33,14 @@ import {
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
-const client = postgres(process.env.POSTGRES_URL ?? "");
+// Shared transaction poolers (serverless) do not reliably support prepared statements.
+// Restrict idle connections to avoid exhausting the project connection budget.
+const client = postgres(process.env.POSTGRES_URL ?? "", {
+  connect_timeout: 10,
+  idle_timeout: 20,
+  max: 2,
+  prepare: false,
+});
 const db = drizzle(client);
 
 export async function getUser(email: string): Promise<User[]> {

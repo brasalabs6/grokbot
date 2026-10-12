@@ -18,16 +18,16 @@ const nextConfig: NextConfig = {
         ],
       }
     : {}),
-  cacheComponents: true,
+  // Agent session/auth routes use runtime state; do not prerender dynamic
+  // trees using the experimental cacheComponents enforcement.
+  cacheComponents: false,
   devIndicators: false,
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath,
   },
   experimental: {
     appNewScrollHandler: true,
-    cachedNavigations: true,
     inlineCss: true,
-    prefetchInlining: true,
     turbopackFileSystemCacheForDev: true,
   },
   images: {

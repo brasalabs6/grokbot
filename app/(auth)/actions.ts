@@ -1,7 +1,8 @@
 "use server";
 
+import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-
+import { isInternalEmailAllowed } from "@/lib/auth/access-policy";
 import { createUser, getUser } from "@/lib/db/queries";
 
 import { signIn } from "./auth";
@@ -9,6 +10,10 @@ import { signIn } from "./auth";
 const authFormSchema = z.object({
   email: z.email(),
   password: z.string().min(6),
+});
+
+const registrationSchema = authFormSchema.extend({
+  inviteCode: z.string().min(1).max(512),
 });
 
 export type LoginActionState = {
@@ -26,7 +31,7 @@ export const login = async (
     });
 
     await signIn("credentials", {
-      email: validatedData.email,
+      email: validatedData.email.trim().toLowerCase(),
       password: validatedData.password,
       redirect: false,
     });
@@ -48,6 +53,7 @@ export type RegisterActionState = {
     | "success"
     | "failed"
     | "user_exists"
+    | "not_allowed"
     | "invalid_data";
 };
 
@@ -56,19 +62,40 @@ export const register = async (
   formData: FormData
 ): Promise<RegisterActionState> => {
   try {
-    const validatedData = authFormSchema.parse({
+    const validatedData = registrationSchema.parse({
       email: formData.get("email"),
+      inviteCode: formData.get("inviteCode"),
       password: formData.get("password"),
     });
 
-    const [user] = await getUser(validatedData.email);
+    const configuredCode = process.env.GROKBOT_SIGNUP_KEY;
+    // An email allowlist by itself is not proof of address ownership. An
+    // uninvited attacker must never claim an allowlisted email first.
+    if (
+      !configuredCode ||
+      configuredCode.length < 32 ||
+      !isInternalEmailAllowed(validatedData.email)
+    ) {
+      return { status: "not_allowed" };
+    }
+    const supplied = Buffer.from(validatedData.inviteCode);
+    const expected = Buffer.from(configuredCode);
+    if (
+      supplied.length !== expected.length ||
+      !timingSafeEqual(supplied, expected)
+    ) {
+      return { status: "not_allowed" };
+    }
+
+    const normalizedEmail = validatedData.email.trim().toLowerCase();
+    const [user] = await getUser(normalizedEmail);
 
     if (user) {
       return { status: "user_exists" } as RegisterActionState;
     }
-    await createUser(validatedData.email, validatedData.password);
+    await createUser(normalizedEmail, validatedData.password);
     await signIn("credentials", {
-      email: validatedData.email,
+      email: validatedData.email.trim().toLowerCase(),
       password: validatedData.password,
       redirect: false,
     });

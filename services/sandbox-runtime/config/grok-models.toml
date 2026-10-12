@@ -1,0 +1,106 @@
+# Non-secret model profile based on the local Grok Build configuration.
+# Real credentials are injected by the trusted Cloudflare Worker proxy.
+# Do NOT replace the placeholder with actual API keys.
+
+[models]
+default = "cf-qwen3.8-27b"
+default_reasoning_effort = "low"
+session_summary = "cf-glm-5.3-flash"
+image_description = "cf-glm-5.3-flash"
+
+[model."cf-glm-5.2"]
+model = "@cf/zai-org/glm-5.2"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF GLM 5.2 (Brasamain Worker Proxy)"
+description = "Z.ai GLM-5.2 via deployed Brasamain Cloudflare Worker rate proxy"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 262144
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model."cf-glm-5.3"]
+model = "@cf/zai-org/glm-5.3"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF GLM 5.3 (Brasamain Worker Proxy)"
+description = "Z.ai GLM-5.3 via deployed Brasamain Cloudflare Worker rate proxy"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 1048576
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model."cf-glm-5.3-flash"]
+model = "@cf/zai-org/glm-5.3-flash"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF GLM 5.3 Flash (Brasamain Worker Proxy)"
+description = "Z.ai GLM-5.3 Flash via deployed Brasamain Cloudflare Worker rate proxy"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 1048576
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model.cf-deepseek-v4-flash]
+model = "@cf/deepseek-ai/deepseek-v4-flash-0731"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF DeepSeek V4 Flash (Brasamain Worker Proxy)"
+description = "DeepSeek V4 Flash via Cloudflare multi-account failover proxy"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 1310720
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model."cf-glm-5.3-cyber"]
+model = "glm-5.3-cyber"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF GLM 5.3 Cyber (Brasamain Worker Proxy)"
+description = "GLM-5.3 Cyber alias via deployed Brasamain Cloudflare Worker rate proxy"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 1048576
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model."cf-glm-5.2-cyber"]
+model = "glm-5.2-cyber"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF GLM 5.2 Cyber (Brasamain Worker Proxy)"
+description = "GLM-5.2 Cyber alias via deployed Brasamain Cloudflare Worker rate proxy — pinned to GLM 5.2, no model fallback"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 262144
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model."cf-glm-5.3-flash-cyber"]
+model = "glm-5.3-flash-cyber"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF GLM 5.3 Flash Cyber (Brasamain Worker Proxy)"
+description = "GLM-5.3 Flash Cyber alias via deployed Brasamain Cloudflare Worker rate proxy"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 1048576
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+
+[model."cf-qwen3.8-27b"]
+model = "@cf/qwen/qwen3.8-27b"
+base_url = "https://cf-ai-rate-proxy.brasaimainstream.workers.dev/v1"
+name = "CF Qwen 3.8 27B (Brasamain Worker Proxy)"
+description = "Qwen 3.8 27B via Cloudflare Worker proxy; direct route"
+api_backend = "chat_completions"
+api_key = "grokbot-internal-placeholder"
+context_window = 262144
+max_completion_tokens = 16384
+temperature = 0.7
+stream_tool_calls = true
+

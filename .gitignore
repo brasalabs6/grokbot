@@ -25,3 +25,7 @@ yarn-error.log*
 /playwright/*
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# nested runtime build files
+services/sandbox-runtime/.wrangler
+services/sandbox-runtime/dist

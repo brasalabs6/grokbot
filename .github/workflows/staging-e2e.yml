@@ -1,0 +1,39 @@
+name: GrokBot staging end-to-end
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/grokbot-p00-acp-cloudflare-spike]
+permissions:
+  contents: read
+concurrency:
+  group: grokbot-staging-e2e
+  cancel-in-progress: false
+jobs:
+  integration:
+    name: Grok ACP + Workers AI + tool execution
+    if: github.ref == 'refs/heads/feat/grokbot-p00-acp-cloudflare-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[smoke-staging]'))
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      CLOUDFLARE_RUNTIME_URL: https://grokbot-sandbox-runtime-staging.guibelongtovi-a22.workers.dev/
+      CONTROL_PLANE_SERVICE_SECRET: ${{ secrets.CONTROL_PLANE_SERVICE_SECRET }}
+      RUNTIME_TICKET_SECRET: ${{ secrets.RUNTIME_TICKET_SECRET }}
+      STAGING_TEST_RESTORE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check that staging credentials exist
+        run: |
+          test -n "$CONTROL_PLANE_SERVICE_SECRET" || { echo 'Missing staging secret CONTROL_PLANE_SERVICE_SECRET'; exit 1; }
+          test -n "$RUNTIME_TICKET_SECRET" || { echo 'Missing staging secret RUNTIME_TICKET_SECRET'; exit 1; }
+      - name: Confirm staging health
+        run: curl --fail --silent --show-error --max-time 20 "${CLOUDFLARE_RUNTIME_URL%/}/health"
+      - name: Check smoke script syntax
+        run: node --check services/sandbox-runtime/tools/staging-e2e.mjs
+      - name: Execute disposable Grok ACP, Workers AI and tool-calling E2E
+        run: node services/sandbox-runtime/tools/staging-e2e.mjs
