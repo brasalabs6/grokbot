@@ -39,6 +39,23 @@ jobs:
       - name: Install pinned runtime dependencies
         working-directory: services/sandbox-runtime
         run: pnpm install --frozen-lockfile
+      - name: Fail fast until production secrets are installed via Cloudflare dashboard
+        working-directory: services/sandbox-runtime
+        run: |
+          names="$(pnpm exec wrangler secret list --config wrangler.production.jsonc)"
+          printf '%s' "$names" | node -e '
+            let data = "";
+            process.stdin.on("data", c => { data += c; });
+            process.stdin.on("end", () => {
+              const names = new Set(JSON.parse(data).map(item => item.name));
+              for (const name of ["CONTROL_PLANE_SERVICE_SECRET", "RUNTIME_TICKET_SECRET"]) {
+                if (!names.has(name)) {
+                  console.error("Production Worker secret missing: " + name);
+                  process.exitCode = 1;
+                }
+              }
+            });
+          '
       - name: Verify runtime type contracts
         working-directory: services/sandbox-runtime
         run: pnpm check
