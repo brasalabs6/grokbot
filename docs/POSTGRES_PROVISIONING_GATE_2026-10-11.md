@@ -1,3 +1,13 @@
+## UPDATE — October 12, 2026 (newer than the historical failure below)
+
+Supabase `noagi` now contains an **ACTIVE_HEALTHY** dedicated `grokbot` project (`yfviherjflnuntzofsmd`, `us-west-2`). The earlier Free quota failure is historical, **no longer the provisioning blocker**. Both repository schema migrations have been applied and verified: 15 empty application tables; Row Level Security and restricted public access; Drizzle history recorded.
+
+**Current production blockers:** Vercel still lacks `POSTGRES_URL`, `GROKBOT_SIGNUP_KEY`, `RUNTIME_TICKET_SECRET` and `CONTROL_PLANE_SERVICE_SECRET`, and these secrets must be configured without printing or committing them. The custom DB role `grokbot_runtime` is NOLOGIN pending a secure password-activation method. The operator can instead use the Supabase Connect dialog to obtain the project's **Transaction pooler** URI (port `6543`) for the `postgres` login, then add it privately to the Vercel project's environment variables as `POSTGRES_URL`. Copy the full host from Connect; never infer the `aws-[INDEX]` pooler index from `us-west-2`. If the original database password is unknown, reset it through Supabase Dashboard; do not send passwords in chat.
+
+Vercel environment variable settings: `https://vercel.com/guicorinthias-gmailcoms-projects/grokbot/settings/environment-variables` (Preview and Production). Keep `FEATURE_AGENT_RUNTIME=0` until database/identity/runtime secrets are paired and `/api/readiness` succeeds. This project has not been merged or released; AgencyOS was not touched.
+
+---
+
 # GrokBot — dedicated PostgreSQL provisioning gate (2026-10-11)
 
 ## Current real state
